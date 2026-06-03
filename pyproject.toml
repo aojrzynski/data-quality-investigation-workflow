@@ -1,0 +1,41 @@
+[build-system]
+requires = []
+build-backend = "_build_backend"
+backend-path = ["build_backend"]
+
+[project]
+name = "data-quality-investigation-workflow"
+version = "0.1.0"
+description = "Local-first scaffold for investigating suspected data quality issues with human review artifacts."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Adam Ojrzynski" }
+]
+keywords = ["data-quality", "workflow", "investigation"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+dq-investigate = "data_quality_investigation_workflow.cli:main"
+
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
