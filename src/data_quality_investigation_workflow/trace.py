@@ -31,12 +31,17 @@ def build_investigation_trace(
     plan_path: Path,
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
+    ledger_path: Path | None = None,
+    evidence_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build an investigation trace payload with concise route metadata."""
+    """Build an investigation trace payload with concise route and evidence metadata."""
     classification = classify_issue(issue_statement)
     input_provided = loaded_dataset is not None
     issue_missing = classification["issue_type"] == "missing_issue_statement"
-    if issue_missing:
+    if evidence_metadata is not None and ledger_path is not None and not issue_missing:
+        status = "evidence_recorded"
+        stage = "deterministic_checks_recorded"
+    elif issue_missing:
         status = "plan_not_ready"
         stage = "missing_issue_statement"
     elif input_provided:
@@ -65,6 +70,7 @@ def build_investigation_trace(
             "investigation_case": case_path.as_posix(),
             "dataset_profile": profile_path.as_posix() if profile_path else None,
             "investigation_plan": plan_path.as_posix(),
+            "evidence_ledger": ledger_path.as_posix() if ledger_path else None,
             "investigation_trace": trace_path.as_posix(),
         },
         "authority_boundary": AUTHORITY_BOUNDARY,
@@ -77,19 +83,16 @@ def build_investigation_trace(
             "row_count": loaded_dataset.row_count,
             "column_count": loaded_dataset.column_count,
         }
+    if evidence_metadata is not None:
+        payload["evidence"] = {
+            "checks_executed_count": int(evidence_metadata.get("checks_executed_count", 0)),
+            "evidence_item_count": int(evidence_metadata.get("evidence_item_count", 0)),
+            "checks_not_run_count": int(evidence_metadata.get("checks_not_run_count", 0)),
+            "route_name": classification["selected_route"],
+            "issue_type": classification["issue_type"],
+            "ledger_artifact": ledger_path.as_posix() if ledger_path else None,
+        }
     return payload
-
-
-def build_scaffold_trace(
-    issue_statement: str | None, trace_path: Path, case_path: Path, plan_path: Path
-) -> dict[str, Any]:
-    """Build the case-only investigation trace payload."""
-    return build_investigation_trace(
-        issue_statement=issue_statement,
-        trace_path=trace_path,
-        case_path=case_path,
-        plan_path=plan_path,
-    )
 
 
 def build_profiled_trace(
@@ -120,6 +123,8 @@ def write_investigation_trace(
     plan_path: Path,
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
+    ledger_path: Path | None = None,
+    evidence_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Create the output directory and write the investigation trace JSON artifact."""
     output_path = Path(output_dir)
@@ -133,25 +138,11 @@ def write_investigation_trace(
         plan_path=plan_path,
         loaded_dataset=loaded_dataset,
         profile_path=profile_path,
+        ledger_path=ledger_path,
+        evidence_metadata=evidence_metadata,
     )
     _write_json(trace_path, trace)
     return trace_path
-
-
-def write_scaffold_trace(
-    output_dir: str | Path,
-    issue_statement: str | None,
-    case_path: Path,
-    plan_path: Path | None = None,
-) -> Path:
-    """Backward-compatible alias for writing a case-only trace."""
-    output_path = Path(output_dir)
-    return write_investigation_trace(
-        output_dir=output_path,
-        issue_statement=issue_statement,
-        case_path=case_path,
-        plan_path=plan_path or output_path / "investigation_plan.json",
-    )
 
 
 def write_profiled_trace(

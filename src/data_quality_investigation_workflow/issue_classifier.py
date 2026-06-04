@@ -42,6 +42,7 @@ ISSUE_PATTERNS = {
         "blank",
         "missing value",
         "empty field",
+        "blank more often",
         "missing email",
         "increased nulls",
     ],
@@ -51,6 +52,7 @@ ISSUE_PATTERNS = {
         "missing day",
         "date gap",
         "no records for date",
+        "no records for one day",
         "missing period",
     ],
     "total_change": [
@@ -61,6 +63,7 @@ ISSUE_PATTERNS = {
         "decreased",
         "report total",
         "count changed",
+        "row count changed",
         "volume changed",
     ],
     "category_shift": [

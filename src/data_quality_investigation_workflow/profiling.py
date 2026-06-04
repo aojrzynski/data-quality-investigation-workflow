@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from typing import Any
+import warnings
 
 import pandas as pd
 from pandas.api.types import (
@@ -162,7 +163,9 @@ def _parsed_datetimes(series: pd.Series) -> tuple[int, pd.Series] | None:
     if non_null.empty:
         return None
 
-    parsed = pd.to_datetime(non_null, errors="coerce")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        parsed = pd.to_datetime(non_null, errors="coerce")
     return int(parsed.notna().sum()), parsed
 
 

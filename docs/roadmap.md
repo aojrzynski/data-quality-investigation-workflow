@@ -13,11 +13,11 @@ This roadmap describes the intended pull request sequence for building the Data 
 - **PR #3: issue intake and investigation case file — implemented**
   Added `investigation_case.json` as the issue-led case file foundation, records whether input was supplied, references dataset profile and trace artifacts when available, and preserved the no-investigation/no-findings boundary before planning classification was added.
 
-- **PR #4: investigation planning and route selection — current / implemented**
+- **PR #4: investigation planning and route selection — implemented**
   Added deterministic issue classification for planning purposes only, selected planned routes, and wrote `investigation_plan.json` without running checks.
 
-- **PR #5: deterministic checks and evidence ledger**
-  Add deterministic checks for selected issue routes and record results in an evidence ledger.
+- **PR #5: deterministic checks and evidence ledger — current / implemented**
+  Added deterministic current-dataset checks for selected issue routes and recorded aggregate-only results in `evidence_ledger.json`.
 
 - **PR #6: baseline comparison support**
   Add support for comparing the current dataset against a supplied baseline or previous run artifact.

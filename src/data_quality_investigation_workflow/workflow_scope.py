@@ -12,23 +12,25 @@ IMPLEMENTED_SCOPE = [
     "deterministic issue classification for planning",
     "investigation plan artifact",
     "planned route selection",
+    "deterministic current-dataset issue checks",
+    "aggregate-only evidence ledger",
 ]
 
 NOT_YET_IMPLEMENTED = [
-    "deterministic issue checks",
-    "evidence ledger",
     "hypothesis tracking",
     "baseline comparison",
     "Markdown investigation report",
     "optional LLM notes",
+    "final findings artifact",
 ]
 
 AUTHORITY_BOUNDARY = [
     "Profiling is not investigation.",
     "Issue classification is a planning aid only.",
-    "Planned checks have not been executed.",
-    "The plan does not confirm the reported issue.",
-    "The plan does not identify root cause.",
+    "Deterministic checks record aggregate evidence signals only.",
+    "Evidence signals are not final findings.",
+    "The workflow does not confirm the reported issue.",
+    "The workflow does not identify root cause.",
     "This tool does not approve, fix, certify, or trust a dataset.",
     "This tool does not make legal, compliance, privacy, or governance verdicts.",
     "No raw rows are written to artifacts.",

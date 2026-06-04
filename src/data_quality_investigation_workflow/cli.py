@@ -10,7 +10,9 @@ from typing import Sequence
 from data_quality_investigation_workflow import __version__
 from data_quality_investigation_workflow.case_file import write_investigation_case
 from data_quality_investigation_workflow.planning import PLAN_FILENAME, write_investigation_plan
+from data_quality_investigation_workflow.evidence import LEDGER_FILENAME, write_evidence_ledger
 from data_quality_investigation_workflow.errors import WorkflowUserError
+from data_quality_investigation_workflow.issue_classifier import classify_issue
 from data_quality_investigation_workflow.trace import (
     DATASET_PROFILE_FILENAME,
     TRACE_FILENAME,
@@ -92,8 +94,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         profile_path = output_dir / DATASET_PROFILE_FILENAME
         plan_path = output_dir / PLAN_FILENAME
         trace_path = output_dir / TRACE_FILENAME
+        ledger_path = output_dir / LEDGER_FILENAME
 
         loaded_dataset = load_dataset(args.input, sheet=args.sheet)
+        classification = classify_issue(args.issue)
 
         from data_quality_investigation_workflow.profiling import build_dataset_profile
 
@@ -108,6 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             loaded_dataset=loaded_dataset,
             profile_path=profile_path,
             plan_path=plan_path,
+            ledger_path=ledger_path,
         )
         plan_path = write_investigation_plan(
             output_dir=output_dir,
@@ -116,7 +121,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             dataset_profile=profile,
             case_path=case_path,
             profile_path=profile_path,
+            ledger_path=ledger_path,
         )
+        investigation_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        ledger_path = write_evidence_ledger(
+            output_dir=output_dir,
+            issue_statement=args.issue,
+            classification=classification,
+            route_name=classification["selected_route"],
+            loaded_dataset=loaded_dataset,
+            dataset_profile=profile,
+            investigation_plan=investigation_plan,
+            case_path=case_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            trace_path=trace_path,
+        )
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
         trace_path = write_investigation_trace(
             output_dir=output_dir,
             issue_statement=args.issue,
@@ -124,10 +145,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             profile_path=profile_path,
             case_path=case_path,
             plan_path=plan_path,
+            ledger_path=ledger_path,
+            evidence_metadata={
+                "checks_executed_count": ledger["execution"]["checks_executed_count"],
+                "evidence_item_count": ledger["execution"]["evidence_item_count"],
+                "checks_not_run_count": ledger["execution"]["checks_not_run_count"],
+            },
         )
         print(f"Investigation case written to {case_path.as_posix()}")
         print(f"Dataset profile written to {profile_path.as_posix()}")
         print(f"Investigation plan written to {plan_path.as_posix()}")
+        print(f"Evidence ledger written to {ledger_path.as_posix()}")
         print(f"Investigation trace written to {trace_path.as_posix()}")
         return 0
     except WorkflowUserError as error:
