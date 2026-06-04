@@ -22,11 +22,11 @@ IMPLEMENTED_SCOPE = [
     "scaffold trace artifact",
     "local CSV/XLSX/XLSM dataset intake",
     "safe aggregate dataset profiling",
+    "investigation case file",
 ]
 
 NOT_YET_IMPLEMENTED = [
     "issue classification",
-    "investigation case file",
     "investigation planning",
     "route selection",
     "deterministic issue checks",
@@ -49,18 +49,21 @@ AUTHORITY_BOUNDARY = [
 ]
 
 
-def build_scaffold_trace(issue_statement: str | None, trace_path: Path) -> dict[str, Any]:
-    """Build the scaffold-only investigation trace payload."""
+def build_scaffold_trace(
+    issue_statement: str | None, trace_path: Path, case_path: Path
+) -> dict[str, Any]:
+    """Build the case-only investigation trace payload."""
     return {
         "tool_name": TOOL_NAME,
         "package_version": __version__,
-        "status": "scaffold",
-        "stage": "repo_scaffold",
+        "status": "case_created",
+        "stage": "investigation_case_created",
         "run_timestamp_utc": datetime.now(UTC).isoformat(),
         "issue_statement": issue_statement,
         "implemented_scope": IMPLEMENTED_SCOPE,
         "not_yet_implemented": NOT_YET_IMPLEMENTED,
         "artifacts": {
+            "investigation_case": case_path.as_posix(),
             "investigation_trace": trace_path.as_posix(),
         },
         "authority_boundary": AUTHORITY_BOUNDARY,
@@ -73,13 +76,14 @@ def build_profiled_trace(
     loaded_dataset: "LoadedDataset",
     profile_path: Path,
     trace_path: Path,
+    case_path: Path,
 ) -> dict[str, Any]:
     """Build a trace payload for a run that produced a dataset profile."""
     return {
         "tool_name": TOOL_NAME,
         "package_version": __version__,
-        "status": "profiled",
-        "stage": "dataset_profiled",
+        "status": "case_profiled",
+        "stage": "dataset_profiled_case_created",
         "run_timestamp_utc": datetime.now(UTC).isoformat(),
         "issue_statement": issue_statement,
         "implemented_scope": IMPLEMENTED_SCOPE,
@@ -92,6 +96,7 @@ def build_profiled_trace(
             "column_count": loaded_dataset.column_count,
         },
         "artifacts": {
+            "investigation_case": case_path.as_posix(),
             "dataset_profile": profile_path.as_posix(),
             "investigation_trace": trace_path.as_posix(),
         },
@@ -99,13 +104,17 @@ def build_profiled_trace(
     }
 
 
-def write_scaffold_trace(output_dir: str | Path, issue_statement: str | None) -> Path:
-    """Create the output directory and write the scaffold trace JSON artifact."""
+def write_scaffold_trace(
+    output_dir: str | Path, issue_statement: str | None, case_path: Path
+) -> Path:
+    """Create the output directory and write the case-only trace JSON artifact."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     trace_path = output_path / TRACE_FILENAME
-    trace = build_scaffold_trace(issue_statement=issue_statement, trace_path=trace_path)
+    trace = build_scaffold_trace(
+        issue_statement=issue_statement, trace_path=trace_path, case_path=case_path
+    )
     _write_json(trace_path, trace)
     return trace_path
 
@@ -116,6 +125,7 @@ def write_profiled_trace(
     issue_statement: str | None,
     loaded_dataset: "LoadedDataset",
     profile_path: Path,
+    case_path: Path,
 ) -> Path:
     """Create the output directory and write a profiled-run trace artifact."""
     output_path = Path(output_dir)
@@ -127,6 +137,7 @@ def write_profiled_trace(
         loaded_dataset=loaded_dataset,
         profile_path=profile_path,
         trace_path=trace_path,
+        case_path=case_path,
     )
     _write_json(trace_path, trace)
     return trace_path

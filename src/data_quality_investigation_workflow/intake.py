@@ -74,7 +74,15 @@ def _load_excel(path: Path, sheet: str | None) -> tuple[pd.DataFrame, str]:
     """Load an Excel worksheet, requiring --sheet for multi-sheet workbooks."""
     import pandas as pd
 
-    excel_file = pd.ExcelFile(path, engine="openpyxl")
+    try:
+        excel_file = pd.ExcelFile(path, engine="openpyxl")
+    except ImportError as error:
+        if "openpyxl" in str(error):
+            raise DatasetIntakeError(
+                "Missing required dependency 'openpyxl'. Install the package with "
+                "runtime dependencies before profiling Excel files."
+            ) from error
+        raise
     sheet_names = [str(name) for name in excel_file.sheet_names]
 
     if sheet is None:
