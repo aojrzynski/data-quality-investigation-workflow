@@ -10,9 +10,19 @@ from uuid import uuid4
 
 from data_quality_investigation_workflow.issue_classifier import classify_issue
 from data_quality_investigation_workflow.planning import PLAN_FILENAME
-from data_quality_investigation_workflow.baseline import BASELINE_COMPARISON_FILENAME, BASELINE_PROFILE_FILENAME
-from data_quality_investigation_workflow.trace import DATASET_PROFILE_FILENAME, TRACE_FILENAME
-from data_quality_investigation_workflow.workflow_scope import IMPLEMENTED_SCOPE, NOT_YET_IMPLEMENTED
+from data_quality_investigation_workflow.reporting import REPORT_FILENAME
+from data_quality_investigation_workflow.baseline import (
+    BASELINE_COMPARISON_FILENAME,
+    BASELINE_PROFILE_FILENAME,
+)
+from data_quality_investigation_workflow.trace import (
+    DATASET_PROFILE_FILENAME,
+    TRACE_FILENAME,
+)
+from data_quality_investigation_workflow.workflow_scope import (
+    IMPLEMENTED_SCOPE,
+    NOT_YET_IMPLEMENTED,
+)
 
 if TYPE_CHECKING:
     from data_quality_investigation_workflow.intake import LoadedDataset
@@ -50,6 +60,7 @@ def build_investigation_case(
     baseline_comparison_path: Path | None = None,
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
+    report_path: Path | None = None,
     case_id: str | None = None,
     created_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -63,17 +74,27 @@ def build_investigation_case(
     if loaded_dataset is not None and dataset_profile_path is None:
         dataset_profile_path = output_path / DATASET_PROFILE_FILENAME
     baseline_profile_path = baseline_profile_path or (
-        output_path / BASELINE_PROFILE_FILENAME if baseline_dataset is not None else None
+        output_path / BASELINE_PROFILE_FILENAME
+        if baseline_dataset is not None
+        else None
     )
     baseline_comparison_path = baseline_comparison_path or (
-        output_path / BASELINE_COMPARISON_FILENAME if baseline_dataset is not None else None
+        output_path / BASELINE_COMPARISON_FILENAME
+        if baseline_dataset is not None
+        else None
     )
+    if report_path is None and findings_path is not None:
+        report_path = output_path / REPORT_FILENAME
 
     artifacts = {
         "investigation_case": case_path.as_posix(),
-        "dataset_profile": dataset_profile_path.as_posix() if dataset_profile_path else None,
+        "dataset_profile": dataset_profile_path.as_posix()
+        if dataset_profile_path
+        else None,
         "investigation_plan": investigation_plan_path.as_posix(),
-        "evidence_ledger": evidence_ledger_path.as_posix() if evidence_ledger_path else None,
+        "evidence_ledger": evidence_ledger_path.as_posix()
+        if evidence_ledger_path
+        else None,
         "investigation_trace": trace_path.as_posix(),
     }
     if baseline_profile_path is not None:
@@ -84,6 +105,8 @@ def build_investigation_case(
         artifacts["hypothesis_tracker"] = hypothesis_tracker_path.as_posix()
     if findings_path is not None:
         artifacts["investigation_findings"] = findings_path.as_posix()
+    if report_path is not None:
+        artifacts["investigation_report"] = report_path.as_posix()
 
     input_provided = loaded_dataset is not None
     classification = classify_issue(issue_statement)
@@ -91,7 +114,21 @@ def build_investigation_case(
     if issue_missing:
         workflow_status = "plan_not_ready"
         workflow_stage = "missing_issue_statement"
-    elif input_provided and evidence_ledger_path is not None and hypothesis_tracker_path is not None and findings_path is not None:
+    elif (
+        input_provided
+        and evidence_ledger_path is not None
+        and hypothesis_tracker_path is not None
+        and findings_path is not None
+        and report_path is not None
+    ):
+        workflow_status = "report_written"
+        workflow_stage = "markdown_report_created"
+    elif (
+        input_provided
+        and evidence_ledger_path is not None
+        and hypothesis_tracker_path is not None
+        and findings_path is not None
+    ):
         workflow_status = "findings_summarized"
         workflow_stage = "hypotheses_and_findings_created"
     elif input_provided and evidence_ledger_path is not None:
@@ -143,6 +180,7 @@ def write_investigation_case(
     baseline_comparison_path: Path | None = None,
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
+    report_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation case artifact."""
     output_path = Path(output_dir)
@@ -160,8 +198,11 @@ def write_investigation_case(
         baseline_comparison_path=baseline_comparison_path,
         hypothesis_tracker_path=hypothesis_tracker_path,
         findings_path=findings_path,
+        report_path=report_path,
     )
-    case_path.write_text(json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    case_path.write_text(
+        json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
     return case_path
 
 

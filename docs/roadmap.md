@@ -22,14 +22,14 @@ This roadmap describes the intended pull request sequence for building the Data 
 - **PR #6: baseline comparison support — implemented**
   Added support for comparing the current dataset against a supplied baseline dataset with aggregate-only baseline comparison evidence.
 
-- **PR #7: hypothesis tracker and findings builder — current / implemented**
+- **PR #7: hypothesis tracker and findings builder — implemented**
   Added `hypothesis_tracker.json` and `investigation_findings.json` for input + issue runs, mapping deterministic evidence IDs into cautious route-specific hypotheses and review-oriented finding summaries.
 
-- **PR #8: Markdown report and deeper docs**
-  Add a human-readable investigation report and expand usage documentation.
+- **PR #8: Markdown report and deeper docs — current / implemented**
+  Added `investigation_report.md` for input + issue runs and expanded README/docs for architecture, artifacts, commands, safety boundaries, and demo usage.
 
-- **PR #9: optional bounded LLM investigation notes**
-  Add optional LLM-generated notes over safe evidence only. LLM output will not be treated as authoritative.
+- **PR #9: optional bounded LLM investigation notes — future**
+  Optional bounded LLM-generated notes over safe evidence only. LLM output must not be treated as authoritative.
 
-- **PR #10: source comment/docstring pass**
+- **PR #10: source comment/docstring pass — future**
   Review code comments and docstrings for clarity after the main workflow pieces are in place.
