@@ -1,7 +1,9 @@
 """Investigation plan artifact builders.
 
-Plans make the deterministic route, candidate columns, planned checks, missing
-inputs, and limitations visible before evidence is interpreted.
+The plan records what the workflow intends to check for the selected route and
+what inputs those checks need. Some planned checks are executable now; others are
+human-review-led or require a future input such as a baseline. Candidate columns
+are selected from names and profile metadata only, not from raw values.
 """
 
 from __future__ import annotations
@@ -34,38 +36,158 @@ PLAN_LIMITATIONS = [
 
 _CHECKS = {
     "duplicate_key": [
-        ("planned_duplicate_key_summary", "Duplicate key summary", "Check whether candidate key columns contain duplicate non-null values.", ["duplicate count", "affected column names", "aggregate severity signal"], False),
-        ("planned_key_null_summary", "Key null summary", "Check whether candidate key columns contain null values.", ["null count", "affected key column names"], False),
-        ("planned_duplicate_pattern_review", "Duplicate pattern review", "Review aggregate duplicate signals for likely duplicate-key patterns.", ["aggregate duplicate pattern notes"], False),
+        (
+            "planned_duplicate_key_summary",
+            "Duplicate key summary",
+            "Check whether candidate key columns contain duplicate non-null values.",
+            ["duplicate count", "affected column names", "aggregate severity signal"],
+            False,
+        ),
+        (
+            "planned_key_null_summary",
+            "Key null summary",
+            "Check whether candidate key columns contain null values.",
+            ["null count", "affected key column names"],
+            False,
+        ),
+        (
+            "planned_duplicate_pattern_review",
+            "Duplicate pattern review",
+            "Review aggregate duplicate signals for likely duplicate-key patterns.",
+            ["aggregate duplicate pattern notes"],
+            False,
+        ),
     ],
     "null_increase": [
-        ("planned_current_null_summary", "Current null summary", "Summarize current null counts and percentages for candidate columns.", ["null count", "null percentage", "affected column names"], False),
-        ("planned_baseline_null_comparison", "Baseline null comparison", "Compare current null rates against a baseline when available.", ["baseline delta", "changed columns"], True),
-        ("planned_null_by_candidate_group_review", "Null by candidate group review", "Review whether null changes cluster by safe candidate grouping columns.", ["aggregate group-level null signal"], False),
+        (
+            "planned_current_null_summary",
+            "Current null summary",
+            "Summarize current null counts and percentages for candidate columns.",
+            ["null count", "null percentage", "affected column names"],
+            False,
+        ),
+        (
+            "planned_baseline_null_comparison",
+            "Baseline null comparison",
+            "Compare current null rates against a baseline when available.",
+            ["baseline delta", "changed columns"],
+            True,
+        ),
+        (
+            "planned_null_by_candidate_group_review",
+            "Null by candidate group review",
+            "Review whether null changes cluster by safe candidate grouping columns.",
+            ["aggregate group-level null signal"],
+            False,
+        ),
     ],
     "date_gap": [
-        ("planned_date_range_summary", "Date range summary", "Summarize date ranges for candidate date columns.", ["minimum date", "maximum date", "date coverage signal"], False),
-        ("planned_missing_period_detection", "Missing period detection", "Detect missing expected periods in candidate date columns.", ["missing period count", "affected date columns"], False),
-        ("planned_date_frequency_review", "Date frequency review", "Review whether date frequency matches the expected cadence.", ["cadence signal", "frequency notes"], False),
+        (
+            "planned_date_range_summary",
+            "Date range summary",
+            "Summarize date ranges for candidate date columns.",
+            ["minimum date", "maximum date", "date coverage signal"],
+            False,
+        ),
+        (
+            "planned_missing_period_detection",
+            "Missing period detection",
+            "Detect missing expected periods in candidate date columns.",
+            ["missing period count", "affected date columns"],
+            False,
+        ),
+        (
+            "planned_date_frequency_review",
+            "Date frequency review",
+            "Review whether date frequency matches the expected cadence.",
+            ["cadence signal", "frequency notes"],
+            False,
+        ),
     ],
     "category_shift": [
-        ("planned_category_distribution_summary", "Category distribution summary", "Summarize current category distributions for candidate categorical columns.", ["category counts", "category percentages"], False),
-        ("planned_baseline_category_comparison", "Baseline category comparison", "Compare category distributions against a baseline when available.", ["distribution delta", "changed categories"], True),
-        ("planned_unexpected_category_review", "Unexpected category review", "Review whether unexpected categories appear in candidate columns.", ["unexpected category signal"], False),
+        (
+            "planned_category_distribution_summary",
+            "Category distribution summary",
+            "Summarize current category distributions for candidate categorical columns.",
+            ["category counts", "category percentages"],
+            False,
+        ),
+        (
+            "planned_baseline_category_comparison",
+            "Baseline category comparison",
+            "Compare category distributions against a baseline when available.",
+            ["distribution delta", "changed categories"],
+            True,
+        ),
+        (
+            "planned_unexpected_category_review",
+            "Unexpected category review",
+            "Review whether unexpected categories appear in candidate columns.",
+            ["unexpected category signal"],
+            False,
+        ),
     ],
     "total_change": [
-        ("planned_numeric_total_summary", "Numeric total summary", "Summarize totals for candidate numeric columns.", ["numeric totals", "affected numeric columns"], False),
-        ("planned_baseline_total_comparison", "Baseline total comparison", "Compare totals against a baseline when available.", ["total delta", "baseline comparison signal"], True),
-        ("planned_row_count_change_review", "Row count change review", "Review whether row count changes may explain total or volume changes.", ["row count delta", "volume signal"], True),
+        (
+            "planned_numeric_total_summary",
+            "Numeric total summary",
+            "Summarize totals for candidate numeric columns.",
+            ["numeric totals", "affected numeric columns"],
+            False,
+        ),
+        (
+            "planned_baseline_total_comparison",
+            "Baseline total comparison",
+            "Compare totals against a baseline when available.",
+            ["total delta", "baseline comparison signal"],
+            True,
+        ),
+        (
+            "planned_row_count_change_review",
+            "Row count change review",
+            "Review whether row count changes may explain total or volume changes.",
+            ["row count delta", "volume signal"],
+            True,
+        ),
     ],
     "schema_change": [
-        ("planned_current_schema_summary", "Current schema summary", "Summarize current column names, order, and inferred types.", ["column count", "column names", "inferred column kinds"], False),
-        ("planned_baseline_schema_comparison", "Baseline schema comparison", "Compare current schema against a baseline when available.", ["added columns", "removed columns", "type changes"], True),
-        ("planned_required_column_review", "Required column review", "Review whether expected business-required columns are present.", ["required column status"], False),
+        (
+            "planned_current_schema_summary",
+            "Current schema summary",
+            "Summarize current column names, order, and inferred types.",
+            ["column count", "column names", "inferred column kinds"],
+            False,
+        ),
+        (
+            "planned_baseline_schema_comparison",
+            "Baseline schema comparison",
+            "Compare current schema against a baseline when available.",
+            ["added columns", "removed columns", "type changes"],
+            True,
+        ),
+        (
+            "planned_required_column_review",
+            "Required column review",
+            "Review whether expected business-required columns are present.",
+            ["required column status"],
+            False,
+        ),
     ],
     "general_suspected_issue": [
-        ("planned_general_profile_review", "General profile review", "Review safe aggregate profile metrics for human-directed investigation.", ["profile review prompts"], False),
-        ("planned_reviewer_question_capture", "Reviewer question capture", "Capture clarifying questions needed before selecting a more specific route.", ["reviewer questions"], False),
+        (
+            "planned_general_profile_review",
+            "General profile review",
+            "Review safe aggregate profile metrics for human-directed investigation.",
+            ["profile review prompts"],
+            False,
+        ),
+        (
+            "planned_reviewer_question_capture",
+            "Reviewer question capture",
+            "Capture clarifying questions needed before selecting a more specific route.",
+            ["reviewer questions"],
+            False,
+        ),
     ],
 }
 
@@ -129,6 +251,9 @@ def build_investigation_plan(
 ) -> dict[str, Any]:
     """Build an investigation plan without executing planned checks."""
     classification = classify_issue(issue_statement)
+    # The plan makes the route visible before any checks run. That lets a human
+    # see why a suspected duplicate issue, null issue, or schema issue followed a
+    # particular path.
     issue_type = classification["issue_type"]
     route_name = classification["selected_route"]
     return {
@@ -162,7 +287,9 @@ def build_investigation_plan(
             issue_statement=issue_statement,
             issue_type=issue_type,
         ),
-        "planned_checks": _planned_checks(issue_type, baseline_available=baseline_dataset is not None),
+        "planned_checks": _planned_checks(
+            issue_type, baseline_available=baseline_dataset is not None
+        ),
         "human_review_prompts": _PROMPTS[issue_type],
         "limitations": PLAN_LIMITATIONS,
         "artifacts": _artifacts(
@@ -215,7 +342,9 @@ def write_investigation_plan(
         hypothesis_tracker_path=hypothesis_tracker_path,
         findings_path=findings_path,
     )
-    plan_path.write_text(json.dumps(plan, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    plan_path.write_text(
+        json.dumps(plan, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
     return plan_path
 
 
@@ -289,11 +418,17 @@ def _dataset_context(
         "sheet_name": loaded_dataset.sheet_name,
         "row_count": loaded_dataset.row_count,
         "column_count": loaded_dataset.column_count,
-        "candidate_columns": _candidate_columns(dataset_profile, issue_statement, issue_type),
+        "candidate_columns": _candidate_columns(
+            dataset_profile, issue_statement, issue_type
+        ),
     }
 
 
-def _planned_checks(issue_type: str, *, baseline_available: bool) -> list[dict[str, Any]]:
+def _planned_checks(
+    issue_type: str, *, baseline_available: bool
+) -> list[dict[str, Any]]:
+    # Planned checks document intent. Some are executable in the current run;
+    # others remain human-review-led or need a baseline to become comparison evidence.
     if issue_type == "missing_issue_statement":
         return []
     return [
@@ -306,9 +441,7 @@ def _planned_checks(issue_type: str, *, baseline_available: bool) -> list[dict[s
             "requires_raw_dataset": _requires_raw_dataset(check_id, requires_baseline),
             "requires_baseline": requires_baseline,
             "planned_outputs": planned_outputs,
-            "executable_in_current_run": (
-                not requires_baseline or baseline_available
-            ),
+            "executable_in_current_run": (not requires_baseline or baseline_available),
             "execution_stage": (
                 "baseline_comparison" if requires_baseline else "current_dataset_checks"
             ),
@@ -317,7 +450,9 @@ def _planned_checks(issue_type: str, *, baseline_available: bool) -> list[dict[s
                 "The plan records intended checks. Baseline comparison can record aggregate signals when baseline is supplied, but interpretation remains human-review-led."
             ),
         }
-        for check_id, check_name, purpose, planned_outputs, requires_baseline in _CHECKS[issue_type]
+        for check_id, check_name, purpose, planned_outputs, requires_baseline in _CHECKS[
+            issue_type
+        ]
     ]
 
 
@@ -330,6 +465,8 @@ def _candidate_columns(
     issue_tokens = _issue_tokens(issue_statement)
     candidates: list[dict[str, str]] = []
     for column in columns:
+        # Candidate selection uses names and broad profile metadata only. Raw
+        # values are not inspected for planning hints.
         name = str(column.get("name", ""))
         normalized = name.casefold()
         kind = str(column.get("inferred_kind", ""))
@@ -351,13 +488,17 @@ def _column_matches(
     ):
         return True
     if issue_type == "duplicate_key":
-        return any(term in normalized_name for term in _ROUTE_COLUMN_TERMS["duplicate_key"])
+        return any(
+            term in normalized_name for term in _ROUTE_COLUMN_TERMS["duplicate_key"]
+        )
     if issue_type == "date_gap":
         return kind == "datetime" or any(
             term in normalized_name for term in _ROUTE_COLUMN_TERMS["date_gap"]
         )
     if issue_type == "category_shift":
-        return any(term in normalized_name for term in _ROUTE_COLUMN_TERMS["category_shift"])
+        return any(
+            term in normalized_name for term in _ROUTE_COLUMN_TERMS["category_shift"]
+        )
     if issue_type == "total_change":
         return kind in {"integer", "decimal"} or any(
             term in normalized_name for term in _ROUTE_COLUMN_TERMS["total_change"]
@@ -369,19 +510,41 @@ def _mentions_column(normalized_name: str, issue_tokens: set[str]) -> bool:
     if not normalized_name:
         return False
     name_tokens = set(re.findall(r"[a-z0-9]+", normalized_name))
-    return bool(name_tokens & issue_tokens) or normalized_name.replace("_", " ") in " ".join(
-        sorted(issue_tokens)
-    )
+    return bool(name_tokens & issue_tokens) or normalized_name.replace(
+        "_", " "
+    ) in " ".join(sorted(issue_tokens))
 
 
 def _issue_tokens(issue_statement: str | None) -> set[str]:
     if not issue_statement:
         return set()
     stop_words = {
-        "a", "an", "and", "are", "field", "fields", "has", "have", "in", "the", "to", "with",
-        "started", "increased", "decreased", "missing", "null", "nulls", "blank", "empty",
+        "a",
+        "an",
+        "and",
+        "are",
+        "field",
+        "fields",
+        "has",
+        "have",
+        "in",
+        "the",
+        "to",
+        "with",
+        "started",
+        "increased",
+        "decreased",
+        "missing",
+        "null",
+        "nulls",
+        "blank",
+        "empty",
     }
-    return {token for token in re.findall(r"[a-z0-9]+", issue_statement.casefold()) if token not in stop_words}
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", issue_statement.casefold())
+        if token not in stop_words
+    }
 
 
 def route_name_for_issue_type(issue_type: str) -> str:

@@ -137,6 +137,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        # Validate options that affect safety or user intent before doing any
+        # file work. In particular, --llm-notes must have deterministic findings
+        # available before an optional model is called.
         _validate_llm_args(args)
         _validate_baseline_args(args)
         if args.input is None:
@@ -146,6 +149,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         _run_dataset_workflow(args)
         return 0
     except WorkflowUserError as error:
+        # Expected user-correctable errors should be readable CLI messages, not
+        # Python stack traces.
         parser.exit(status=2, message=f"Error: {error}\n")
 
 
@@ -184,6 +189,8 @@ def _validate_baseline_args(args: argparse.Namespace) -> None:
 def _run_plan_only(args: argparse.Namespace) -> None:
     output_dir = Path(args.output_dir)
     plan_path = output_dir / PLAN_FILENAME
+    # Plan-only runs still write a case first so the reported issue is anchored
+    # before the plan and trace refer to it.
     case_path = write_investigation_case(
         output_dir=output_dir,
         issue_statement=args.issue,
@@ -194,6 +201,8 @@ def _run_plan_only(args: argparse.Namespace) -> None:
         issue_statement=args.issue,
         case_path=case_path,
     )
+    # The trace is written after artifact paths are known so it can serve as a
+    # concise map of what ran and what was produced.
     trace_path = write_investigation_trace(
         output_dir=output_dir,
         issue_statement=args.issue,
@@ -215,6 +224,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
     trace_path = output_dir / TRACE_FILENAME
     ledger_path = output_dir / LEDGER_FILENAME
 
+    # The deterministic chain starts with local intake and aggregate profiling.
+    # Later interpretation stages must be grounded in these written artifacts.
     loaded_dataset = load_dataset(args.input, sheet=args.sheet)
     classification = classify_issue(args.issue)
     issue_provided = bool(classification.get("provided"))
@@ -229,6 +240,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
     baseline_dataset = None
     baseline_profile = None
     baseline_comparison = None
+    # If supplied, the baseline is profiled and compared before evidence is
+    # written so route checks can reference aggregate current-vs-baseline signals.
     if args.baseline is not None:
         baseline_dataset = _load_baseline_dataset(args.baseline, args.baseline_sheet)
         baseline_profile = build_dataset_profile(baseline_dataset)
@@ -244,6 +257,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
             baseline_profile_path=baseline_profile_path,
         )
 
+    # Case, plan, and evidence are written before hypotheses, findings, report,
+    # or LLM notes. This preserves the evidence-first artifact sequence.
     case_path = write_investigation_case(
         output_dir=output_dir,
         issue_statement=args.issue,
@@ -293,6 +308,9 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
 
     hypothesis_metadata = None
     findings_metadata = None
+    # Hypotheses and findings are interpretation aids. They are built only after
+    # the evidence ledger exists and refer back to evidence IDs.
+
     if issue_provided and ledger["execution"]["status"] == "checks_executed":
         artifact_refs = _artifact_refs(
             case_path=case_path,
@@ -389,6 +407,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         report_path = None
 
     llm_metadata = None
+    # Optional LLM notes are last. They use a bounded safe summary derived from
+    # deterministic artifacts and never become the evidence source.
     if (
         args.llm_notes
         and report_path is not None
@@ -402,7 +422,9 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
             ledger_path=ledger_path,
             trace_path=trace_path,
             baseline_profile_path=baseline_profile_path if baseline_dataset else None,
-            baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+            baseline_comparison_path=baseline_comparison_path
+            if baseline_dataset
+            else None,
             hypothesis_tracker_path=hypothesis_tracker_path,
             findings_path=findings_path,
             report_path=report_path,
@@ -446,7 +468,9 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
             ledger_path=ledger_path,
             baseline_dataset=baseline_dataset,
             baseline_profile_path=baseline_profile_path if baseline_dataset else None,
-            baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+            baseline_comparison_path=baseline_comparison_path
+            if baseline_dataset
+            else None,
             hypothesis_tracker_path=hypothesis_tracker_path,
             findings_path=findings_path,
             report_path=report_path,
@@ -455,6 +479,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
             llm_notes_markdown_path=llm_result["notes_markdown_path"],
         )
 
+    # The trace is written after artifact paths are known so it can serve as a
+    # concise map of what ran and what was produced.
     trace_path = write_investigation_trace(
         output_dir=output_dir,
         issue_statement=args.issue,
@@ -500,8 +526,7 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
             f"{llm_metadata['safe_input_summary_artifact']}"
         )
         print(
-            "LLM investigation notes written to "
-            f"{llm_metadata['llm_notes_artifact']}"
+            f"LLM investigation notes written to {llm_metadata['llm_notes_artifact']}"
         )
         if llm_metadata["llm_notes_markdown_artifact"] is not None:
             print(

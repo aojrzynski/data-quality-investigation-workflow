@@ -1,7 +1,9 @@
-"""Deterministic Markdown report builders.
+"""Deterministic Markdown investigation report builders.
 
-The report summarizes existing JSON artifacts for human review. It does not add
-new evidence or make an authority decision.
+The Markdown report is a readable rendering of existing JSON artifacts. It is
+not a new evidence source and it should not introduce claims that are absent
+from the plan, evidence ledger, hypotheses, or findings. The report includes
+only safe aggregate metrics so it can be opened first without exposing raw rows.
 """
 
 from __future__ import annotations
@@ -40,6 +42,8 @@ def build_investigation_report(
 ) -> str:
     """Build a plain Markdown report from already-created safe artifacts."""
     lines: list[str] = []
+    # The report follows the artifact chain. It renders existing JSON summaries
+    # in a reading order rather than recomputing or adding evidence.
     lines.extend(_opening())
     lines.extend(_issue_summary(investigation_findings, investigation_plan))
     lines.extend(
@@ -358,6 +362,8 @@ def _next_steps(findings: dict[str, Any]) -> list[str]:
 
 
 def _safe_metric_rows(items: list[dict[str, Any]]) -> list[tuple[str, str, Any]]:
+    # Include only a small number of obviously safe scalar metrics per evidence
+    # item so the report remains readable and raw-value-safe.
     rows: list[tuple[str, str, Any]] = []
     for item in items:
         evidence_id = str(item.get("evidence_id", "not_available"))

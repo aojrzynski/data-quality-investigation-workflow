@@ -2,38 +2,46 @@
 
 > Given a suspected data quality issue, what should we check, what evidence do we have, and what should a human review next?
 
-Data Quality Investigation Workflow is a local-first Python CLI for issue-led data quality investigations. It takes an issue statement, can optionally read current and baseline local datasets, creates safe aggregate JSON artifacts, and writes a deterministic Markdown report. Optional LLM notes are disabled by default and are secondary to the deterministic artifacts. Human review remains the final authority.
+Data Quality Investigation Workflow is a local-first command-line tool for investigating a reported data quality concern.
+
+A reviewer gives it an issue statement, such as “customer IDs have started duplicating” or “nulls increased in the email field”. The tool can then read a local current dataset, and optionally a local baseline dataset, and produce review material that explains what was checked, what aggregate evidence was found, and what still needs a human decision.
+
+It does not fix the data. It does not prove root cause. It does not approve or certify a dataset. It helps structure the investigation so the reviewer has clearer evidence and better next questions. Human review remains the final authority.
 
 ## The problem
 
-Data quality investigations often start with a practical concern, such as:
+Data quality issues often begin as reports or suspicions. Someone notices that a report total dropped, customer IDs duplicated, dates are missing, or an important field has more blanks than expected.
 
-- customer IDs started duplicating;
-- nulls increased in an important field;
-- totals changed between extracts;
-- dates have unexpected gaps;
-- the schema changed;
-- category patterns shifted.
+At that point, the team needs to investigate. A suspected issue is not the same thing as confirmed evidence. The concern may be real, partly real, caused by an upstream change, caused by a reporting change, or not visible in the current file at all.
 
-The hard part is not only spotting a signal. It is keeping the investigation reproducible, safe to inspect, and clear about what still needs human review.
+A good investigation needs to keep several things separate:
+
+- what was reported;
+- what the current data shows;
+- what changed compared with a baseline;
+- what evidence supports the concern;
+- what is still unclear;
+- what a human should check next.
+
+The hard part is keeping that review structured without exposing raw rows unnecessarily or letting generated text become the decision.
 
 ## What this project does
 
-For each run, the workflow can:
+For each run, the workflow:
 
-1. record the investigation case;
-2. profile the current dataset if supplied;
-3. profile a baseline dataset if supplied;
-4. choose a planning route from deterministic rules;
-5. compare current and baseline aggregates if a baseline is supplied;
-6. run deterministic aggregate checks;
-7. record evidence;
-8. turn evidence into cautious hypotheses;
-9. summarize review-oriented findings;
-10. write a deterministic Markdown report;
-11. optionally write bounded LLM notes if explicitly requested.
+1. Records the reported issue as an investigation case.
+2. Profiles the current file using safe aggregate counts.
+3. Profiles a baseline file if supplied.
+4. Chooses a simple investigation route using deterministic keyword rules.
+5. Compares current and baseline aggregate signals when possible.
+6. Runs deterministic checks related to the selected route.
+7. Records aggregate evidence in an evidence ledger.
+8. Maps evidence into cautious hypotheses.
+9. Summarizes review-oriented findings.
+10. Writes a Markdown report for humans.
+11. Optionally writes bounded LLM notes only when explicitly requested.
 
-The result is review material, not an automated decision.
+The output is review material, not a verdict. The artifacts help a person understand what to inspect next.
 
 ## What to open first
 
@@ -47,15 +55,25 @@ After a run, start here:
 
 ## Why deterministic evidence matters
 
-The same inputs should produce the same evidence-supported signal. The evidence should be inspectable without relying on model wording, hidden state, or raw record samples.
+Deterministic means the same inputs should produce the same outputs. This matters because reviewers need repeatable evidence, not a different answer each time the tool runs.
 
-This workflow writes aggregate artifacts before narrative summaries. Later artifacts refer back to evidence IDs and hypothesis IDs instead of copying raw payloads around. Raw rows are not written into artifacts.
+The workflow records aggregate signals such as row counts, null percentages, duplicate counts, schema differences, date range signals, and current-vs-baseline differences. It writes those signals before it writes narrative summaries.
+
+Later summaries refer back to evidence IDs and hypothesis IDs instead of copying raw payloads around. This makes the investigation easier to check, challenge, and rerun. Raw rows are not written into artifacts.
 
 ## Why not just ask an LLM?
 
-No LLM is used unless you explicitly pass `--llm-notes`.
+An LLM may be useful for wording, cautious summaries, or follow-up questions. But it should not be the source of evidence.
 
-The default path is deterministic and local. Optional LLM notes are downstream of the deterministic artifacts and use only `llm_safe_input_summary.json`. The LLM does not see raw rows. Its output is non-authoritative and does not approve, certify, trust, fix, identify root cause, or confirm the issue.
+An LLM should not see raw dataset rows by default. It should not decide whether the issue is real, why it happened, whether the dataset is safe, or whether it is approved.
+
+This tool therefore builds deterministic artifacts first. Optional LLM notes are disabled by default, require explicit `--llm-notes`, use only `llm_safe_input_summary.json`, and are non-authoritative. No LLM is used unless you explicitly pass `--llm-notes`.
+
+## Why there are several artifacts
+
+Each artifact represents one stage of the investigation. This is deliberate so reviewers can inspect the chain from reported issue, to profile, to plan, to evidence, to hypotheses, to findings, to report.
+
+The Markdown report is the easiest file to read first. The JSON files are there so the evidence, artifact references, and trace are inspectable. The trace shows what ran and what was written without duplicating full evidence payloads or report text.
 
 ## Quick start
 

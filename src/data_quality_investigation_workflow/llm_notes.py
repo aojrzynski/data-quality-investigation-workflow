@@ -1,8 +1,11 @@
 """Optional bounded LLM investigation notes.
 
-This module is downstream of deterministic artifacts. It builds a safe
-aggregate summary, validates model output, and keeps LLM notes
-non-authoritative.
+LLM notes are an optional downstream aid. Before any model call, the workflow
+builds ``llm_safe_input_summary.json`` from deterministic artifacts using
+aggregate-only fields. After a response returns, the JSON is validated for
+shape, authority boundaries, and forbidden decision language before successful
+notes are written. Invalid output produces a failure artifact without storing the
+raw invalid model text.
 """
 
 from __future__ import annotations
@@ -109,11 +112,14 @@ def generate_llm_notes(
     timeout: float | None = None,
     max_output_tokens: int | None = None,
 ) -> dict[str, Path | str | None]:
+    """Generate optional notes from safe artifacts and write validation results."""
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_summary_path = output_dir / LLM_SAFE_INPUT_SUMMARY_FILENAME
     notes_json_path = output_dir / LLM_NOTES_JSON_FILENAME
     notes_markdown_path = output_dir / LLM_NOTES_MARKDOWN_FILENAME
     source_artifacts = _source_artifacts(artifacts)
+    # The safe summary is the only payload the prompt receives. It is written so
+    # reviewers can inspect exactly what optional notes were based on.
     safe_summary = build_safe_input_summary(
         source_artifacts=source_artifacts,
         investigation_case=investigation_case,
@@ -140,6 +146,8 @@ def generate_llm_notes(
 
     notes, errors = parse_and_validate_notes(raw_notes)
     if errors:
+        # Store validation errors, not raw invalid model text. This avoids making
+        # unsafe or off-boundary wording part of the review artifact set.
         failure_artifact = build_notes_failure_artifact(
             model=model,
             input_summary_artifact=safe_summary_path,
@@ -161,7 +169,9 @@ def generate_llm_notes(
         notes=notes,
     )
     _write_json(notes_json_path, notes_artifact)
-    notes_markdown_path.write_text(render_notes_markdown(notes_artifact), encoding="utf-8")
+    notes_markdown_path.write_text(
+        render_notes_markdown(notes_artifact), encoding="utf-8"
+    )
     return {
         "status": "completed",
         "safe_input_summary_path": safe_summary_path,
@@ -187,6 +197,8 @@ def build_safe_input_summary(
     baseline_ref = investigation_case.get("baseline_reference", {})
     current_dataset_shape = dataset_profile.get("dataset", {})
     baseline_dataset_shape = (baseline_profile or {}).get("dataset", {})
+    # Keep this object intentionally small: aggregate counts, IDs, statuses, and
+    # artifact references are enough for optional wording help.
     summary = {
         "artifact_type": "llm_safe_input_summary",
         "summary_version": SUMMARY_VERSION,
@@ -203,7 +215,8 @@ def build_safe_input_summary(
             or current_dataset_shape.get("row_count"),
             "current_column_count": dataset_ref.get("column_count")
             or current_dataset_shape.get("column_count"),
-            "baseline_available": baseline_profile is not None or baseline_comparison is not None,
+            "baseline_available": baseline_profile is not None
+            or baseline_comparison is not None,
             "baseline_file_name": baseline_ref.get("file_name"),
             "baseline_row_count": baseline_ref.get("row_count")
             or baseline_dataset_shape.get("row_count"),
@@ -230,6 +243,8 @@ def parse_and_validate_notes(raw_notes: str) -> tuple[dict[str, Any], list[str]]
         return {}, ["LLM response JSON must be an object."]
 
     errors: list[str] = []
+    # Validate shape first so the notes file stays predictable for readers and
+    # tests, then scan content for blocked raw-value and verdict language.
     extra_keys = sorted(set(parsed) - set(REQUIRED_NOTE_KEYS))
     if extra_keys:
         errors.append("LLM response included keys outside the required schema.")
@@ -267,6 +282,8 @@ def parse_and_validate_notes(raw_notes: str) -> tuple[dict[str, Any], list[str]]
             notes[key] = clean_items
 
     if _contains_forbidden_terms(parsed):
+        # The term list is simple on purpose: it catches obvious boundary breaks
+        # without pretending to be a complete policy engine.
         errors.append("LLM response included blocked raw-value or verdict language.")
     return (notes if not errors else {}, errors)
 
@@ -278,6 +295,7 @@ def build_notes_success_artifact(
     source_artifacts: dict[str, str],
     notes: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build the success artifact after model output passes boundary checks."""
     return {
         "artifact_type": "llm_investigation_notes",
         "notes_version": NOTES_VERSION,
@@ -307,6 +325,7 @@ def build_notes_failure_artifact(
     source_artifacts: dict[str, str],
     errors: list[str],
 ) -> dict[str, Any]:
+    """Build a bounded failure artifact without raw invalid model output."""
     return {
         "artifact_type": "llm_investigation_notes",
         "notes_version": NOTES_VERSION,
@@ -388,9 +407,15 @@ def _hypothesis_summary(hypothesis_tracker: dict[str, Any]) -> dict[str, Any]:
                 "status": hypothesis.get("status"),
                 "signal_level": hypothesis.get("signal_level"),
                 "statement": hypothesis.get("statement"),
-                "supporting_evidence_ids": hypothesis.get("supporting_evidence_ids", []),
-                "contradicting_evidence_ids": hypothesis.get("contradicting_evidence_ids", []),
-                "inconclusive_evidence_ids": hypothesis.get("inconclusive_evidence_ids", []),
+                "supporting_evidence_ids": hypothesis.get(
+                    "supporting_evidence_ids", []
+                ),
+                "contradicting_evidence_ids": hypothesis.get(
+                    "contradicting_evidence_ids", []
+                ),
+                "inconclusive_evidence_ids": hypothesis.get(
+                    "inconclusive_evidence_ids", []
+                ),
             }
         )
     return {
@@ -409,7 +434,9 @@ def _findings_summary(investigation_findings: dict[str, Any]) -> dict[str, Any]:
         "supported_signal_count": summary.get("supported_signal_count", 0),
         "not_supported_signal_count": summary.get("not_supported_signal_count", 0),
         "unclear_item_count": len(investigation_findings.get("unclear_items", [])),
-        "recommended_human_checks": investigation_findings.get("recommended_human_checks", []),
+        "recommended_human_checks": investigation_findings.get(
+            "recommended_human_checks", []
+        ),
     }
 
 
@@ -431,8 +458,12 @@ def _contains_forbidden_terms(value: Any) -> bool:
 
 def _assert_safe_serialized(value: Any) -> None:
     if _contains_forbidden_terms(value):
-        raise WorkflowUserError("LLM safe input summary contained blocked unsafe content.")
+        raise WorkflowUserError(
+            "LLM safe input summary contained blocked unsafe content."
+        )
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )

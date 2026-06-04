@@ -1,4 +1,10 @@
-"""Prompt builders for optional bounded LLM investigation notes."""
+"""Prompt builders for optional bounded LLM investigation notes.
+
+The prompt is deliberately narrow: use only the supplied safe summary, return
+JSON only, do not infer root cause, and do not make approval, safety, trust, or
+certification decisions. This keeps optional notes downstream of deterministic
+evidence instead of turning the model into an authority.
+"""
 
 from __future__ import annotations
 

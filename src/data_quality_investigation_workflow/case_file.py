@@ -1,7 +1,9 @@
 """Investigation case artifact builders.
 
-The case file anchors a run: reported issue, local inputs, artifact paths,
-workflow status, and authority boundaries for human review.
+The case file is the anchor for a run. It records the reported issue, local
+input references, artifact paths, workflow status, and authority boundaries. It
+does not record conclusions: a report or suspicion is useful context, but it is
+not evidence that the issue is confirmed or that root cause is known.
 """
 
 from __future__ import annotations
@@ -78,6 +80,8 @@ def build_investigation_case(
     investigation_plan_path = plan_path or output_path / PLAN_FILENAME
     evidence_ledger_path = ledger_path
     dataset_profile_path = profile_path
+    # The case names expected artifacts even before every downstream stage has
+    # finished, so reviewers can see the intended chain for the run.
     if loaded_dataset is not None and dataset_profile_path is None:
         dataset_profile_path = output_path / DATASET_PROFILE_FILENAME
     baseline_profile_path = baseline_profile_path or (
@@ -104,6 +108,8 @@ def build_investigation_case(
         else None,
         "investigation_trace": trace_path.as_posix(),
     }
+    # Baseline references are included only when a baseline was supplied; current
+    # and baseline files are separate review inputs, not interchangeable evidence.
     if baseline_profile_path is not None:
         artifacts["baseline_profile"] = baseline_profile_path.as_posix()
     if baseline_comparison_path is not None:
@@ -114,16 +120,22 @@ def build_investigation_case(
         artifacts["investigation_findings"] = findings_path.as_posix()
     if report_path is not None:
         artifacts["investigation_report"] = report_path.as_posix()
+    # Optional LLM artifacts are named after the deterministic run exists. Their
+    # presence says notes were requested, not that the notes are authoritative.
     if llm_safe_input_summary_path is not None:
         artifacts["llm_safe_input_summary"] = llm_safe_input_summary_path.as_posix()
     if llm_notes_path is not None:
         artifacts["llm_investigation_notes"] = llm_notes_path.as_posix()
     if llm_notes_markdown_path is not None:
-        artifacts["llm_investigation_notes_markdown"] = llm_notes_markdown_path.as_posix()
+        artifacts["llm_investigation_notes_markdown"] = (
+            llm_notes_markdown_path.as_posix()
+        )
 
     input_provided = loaded_dataset is not None
     classification = classify_issue(issue_statement)
     issue_missing = classification["issue_type"] == "missing_issue_statement"
+    # A missing issue keeps the run in planning mode because the workflow is
+    # issue-led; without a concern, route-specific evidence would be misleading.
     if issue_missing:
         workflow_status = "plan_not_ready"
         workflow_stage = "missing_issue_statement"
@@ -239,6 +251,8 @@ def _issue_payload(issue_statement: str | None) -> dict[str, Any]:
         "classification_note": "Issue classification is deterministic and used only for planning.",
     }
     if not classification["provided"]:
+        # The missing-issue note explains why the case exists but cannot yet
+        # become a full investigation.
         payload["missing_issue_note"] = MISSING_ISSUE_NOTE
     return payload
 

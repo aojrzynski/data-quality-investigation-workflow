@@ -1,7 +1,9 @@
 """Concise investigation trace builders.
 
-The trace records what ran, what was written, and the final stage without
-duplicating evidence payloads, hypotheses, findings, or report text.
+The trace records concise run metadata: what ran, what was written, the selected
+stage, and relevant artifact paths. It intentionally does not duplicate full
+evidence payloads, hypotheses, findings, LLM notes, or report text because the
+trace is for navigation and auditability, not payload storage.
 """
 
 from __future__ import annotations
@@ -52,6 +54,9 @@ def build_investigation_trace(
     """Build an investigation trace payload with concise route and evidence metadata."""
     classification = classify_issue(issue_statement)
     input_provided = loaded_dataset is not None
+    # Trace status follows the farthest completed stage, but it stores counts and
+    # artifact paths rather than repeating the full artifacts.
+
     issue_missing = classification["issue_type"] == "missing_issue_statement"
     if llm_metadata is not None and not issue_missing:
         if llm_metadata.get("status") == "completed":
@@ -85,6 +90,8 @@ def build_investigation_trace(
         status = "planned"
         stage = "investigation_plan_created"
 
+    # The payload is intentionally compact: enough to answer what ran and where
+    # to inspect details, without becoming another evidence or report artifact.
     payload: dict[str, Any] = {
         "tool_name": TOOL_NAME,
         "package_version": __version__,
@@ -358,7 +365,9 @@ def _artifacts(
                 "safe_input_summary_artifact"
             )
         if llm_metadata.get("llm_notes_artifact") is not None:
-            artifacts["llm_investigation_notes"] = llm_metadata.get("llm_notes_artifact")
+            artifacts["llm_investigation_notes"] = llm_metadata.get(
+                "llm_notes_artifact"
+            )
         if llm_metadata.get("llm_notes_markdown_artifact") is not None:
             artifacts["llm_investigation_notes_markdown"] = llm_metadata.get(
                 "llm_notes_markdown_artifact"

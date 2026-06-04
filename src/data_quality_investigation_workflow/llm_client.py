@@ -1,7 +1,9 @@
-"""Optional OpenAI client wrapper for bounded LLM notes.
+"""OpenAI client adapter for optional LLM notes.
 
-The OpenAI import stays optional through the llm extra. Deterministic runs do
-not need OpenAI credentials or the OpenAI package.
+The OpenAI dependency is isolated in this small adapter so deterministic runs do
+not need the OpenAI package, an API key, or network access. Only the explicit
+``--llm-notes`` path imports and uses this client. The rest of the workflow must
+remain useful without an LLM.
 """
 
 from __future__ import annotations
@@ -23,13 +25,18 @@ class OpenAIResponsesNotesClient:
     """Small wrapper around the optional OpenAI Responses API path."""
 
     def __init__(self, *, timeout: float | None = None) -> None:
+        # Import OpenAI lazily so installing and running the deterministic CLI
+        # path never depends on the optional llm extra.
         try:
             openai_module = importlib.import_module("openai")
         except ImportError as error:
             raise WorkflowUserError(MISSING_OPENAI_PACKAGE_MESSAGE) from error
         if not os.environ.get("OPENAI_API_KEY"):
+            # A key is required only for the explicit optional notes path.
             raise WorkflowUserError(MISSING_OPENAI_KEY_MESSAGE)
-        self._client = openai_module.OpenAI(timeout=timeout) if timeout else openai_module.OpenAI()
+        self._client = (
+            openai_module.OpenAI(timeout=timeout) if timeout else openai_module.OpenAI()
+        )
 
     def create_notes(
         self,

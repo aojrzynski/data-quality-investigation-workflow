@@ -1,7 +1,10 @@
 """Local CSV and Excel intake helpers.
 
-The workflow is local-first: this module reads user-supplied files and returns
-metadata needed by aggregate profiling without adding connectors.
+The workflow is local-first: it reads CSV or Excel files from disk and does not
+connect to databases, cloud storage, or SaaS systems. CSV files are loaded
+directly. Excel files may use a named sheet, or the first sheet when no sheet is
+supplied. Expected intake problems raise ``WorkflowUserError`` so the CLI can
+show a clear message without a stack trace.
 """
 
 from __future__ import annotations
@@ -53,8 +56,12 @@ def load_dataset(path: Path, sheet: str | None = None) -> LoadedDataset:
         )
 
     if extension == ".csv":
+        # CSV input has no worksheet concept, so a sheet flag is treated as a
+        # user-facing configuration error rather than ignored silently.
         if sheet is not None:
-            raise DatasetIntakeError("--sheet can only be used with Excel files, not CSV input.")
+            raise DatasetIntakeError(
+                "--sheet can only be used with Excel files, not CSV input."
+            )
         import pandas as pd
 
         dataframe = pd.read_csv(input_path)
@@ -90,6 +97,9 @@ def _load_excel(path: Path, sheet: str | None) -> tuple[pd.DataFrame, str]:
     sheet_names = [str(name) for name in excel_file.sheet_names]
 
     if sheet is None:
+        # Single-sheet workbooks can be loaded directly. Multi-sheet workbooks
+        # require an explicit choice so the reviewer knows which local file tab
+        # was investigated.
         if len(sheet_names) > 1:
             available_sheets = ", ".join(sheet_names)
             raise DatasetIntakeError(

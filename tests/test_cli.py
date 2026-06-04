@@ -1552,7 +1552,9 @@ def test_docs_exist_and_roadmap_mentions_current_scope() -> None:
         assert path.exists()
     roadmap = Path("docs/roadmap.md").read_text(encoding="utf-8").casefold()
     assert "finished v1 scope" in roadmap
-    assert "pr #10 polished" in roadmap
+    assert "deterministic evidence first" in roadmap
+    assert "human review as the final authority" in roadmap
+    assert "pr #" not in roadmap
 
 
 def _assert_report_safety(report: str) -> None:

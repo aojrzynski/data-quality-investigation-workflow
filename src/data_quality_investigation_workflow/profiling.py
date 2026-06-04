@@ -1,7 +1,10 @@
 """Safe aggregate dataset profiling.
 
-Profiles describe dataset shape and column-level aggregates without writing raw
-rows, sampled values, top values, or distinct value lists.
+Profiling turns a loaded local file into aggregate facts: row counts, column
+counts, null counts, broad inferred kinds, and safe summary metrics. It excludes
+raw rows, sampled records, top values, example values, row numbers, and distinct
+value lists. Inferred kind is a practical hint for routing and checks, not a
+semantic guarantee about what a column means.
 """
 
 from __future__ import annotations
@@ -35,6 +38,8 @@ def build_dataset_profile(loaded_dataset: LoadedDataset) -> dict[str, Any]:
     dataframe = loaded_dataset.dataframe
     column_names = loaded_dataset.column_names
 
+    # The profile is the first evidence-adjacent artifact. It captures dataset
+    # shape without writing examples, previews, or value lists.
     return {
         "artifact_type": "dataset_profile",
         "profile_version": PROFILE_VERSION,
@@ -51,7 +56,9 @@ def build_dataset_profile(loaded_dataset: LoadedDataset) -> dict[str, Any]:
             "empty_column_names": _empty_column_names(column_names),
         },
         "columns": [
-            _profile_column(dataframe.iloc[:, position], column_names[position], position)
+            _profile_column(
+                dataframe.iloc[:, position], column_names[position], position
+            )
             for position in range(loaded_dataset.column_count)
         ],
         "safety_notes": SAFETY_NOTES,
@@ -80,6 +87,8 @@ def _profile_column(series: pd.Series, name: str, position: int) -> dict[str, An
         "duplicate_value_count": duplicate_value_count,
     }
 
+    # Kind-specific sections add safe aggregate metrics only. The inferred kind
+    # helps later checks choose columns, but it is not a semantic declaration.
     if kind in {"integer", "decimal"}:
         profile["numeric"] = _numeric_stats(series)
     elif kind == "datetime":
@@ -91,7 +100,7 @@ def _profile_column(series: pd.Series, name: str, position: int) -> dict[str, An
 
 
 def _infer_kind(series: pd.Series) -> str:
-    """Infer a simple deterministic column kind."""
+    """Infer a broad column kind used as a routing hint, not semantic truth."""
     if int(series.notna().sum()) == 0:
         return "empty"
     if is_bool_dtype(series):
@@ -109,7 +118,9 @@ def _infer_kind(series: pd.Series) -> str:
         datetime_summary = _parsed_datetimes(series)
         if datetime_summary is not None:
             parsed_non_null_count, _parsed = datetime_summary
-            parse_success = _percentage(parsed_non_null_count, int(series.notna().sum()))
+            parse_success = _percentage(
+                parsed_non_null_count, int(series.notna().sum())
+            )
             if parse_success >= 80.0:
                 return "datetime"
         return "text"
@@ -118,6 +129,7 @@ def _infer_kind(series: pd.Series) -> str:
 
 
 def _numeric_stats(series: pd.Series) -> dict[str, Any]:
+    """Return bounded numeric aggregates without preserving individual values."""
     numeric = pd.to_numeric(series, errors="coerce")
     non_null_numeric = numeric.dropna()
     if non_null_numeric.empty:
@@ -130,6 +142,7 @@ def _numeric_stats(series: pd.Series) -> dict[str, Any]:
 
 
 def _datetime_stats(series: pd.Series) -> dict[str, Any]:
+    """Return date range and parse counts without listing dates or rows."""
     parsed_summary = _parsed_datetimes(series)
     if parsed_summary is None:
         parsed_non_null_count = int(series.notna().sum())
@@ -148,6 +161,7 @@ def _datetime_stats(series: pd.Series) -> dict[str, Any]:
 
 
 def _text_length_stats(series: pd.Series) -> dict[str, Any]:
+    """Return text length aggregates without storing text values."""
     text_lengths = series.dropna().astype(str).str.len()
     if text_lengths.empty:
         return {"min_length": None, "max_length": None, "average_length": None}
@@ -185,7 +199,11 @@ def _duplicate_column_names(column_names: list[str]) -> list[str]:
 
 
 def _empty_column_names(column_names: list[str]) -> list[str]:
-    return [name for name in column_names if name.strip() == "" or name.startswith("Unnamed:")]
+    return [
+        name
+        for name in column_names
+        if name.strip() == "" or name.startswith("Unnamed:")
+    ]
 
 
 def _json_scalar(value: Any) -> Any:

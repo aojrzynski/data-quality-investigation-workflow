@@ -1,8 +1,10 @@
 """Helpers for consistent artifact reference maps.
 
-The workflow writes several small files in a fixed order. Keeping the common
-reference map in one place reduces drift between the CLI and report-oriented
-artifacts without changing artifact names.
+The workflow writes a case file, profiles, a plan, an evidence ledger, a
+report, and a trace. Those files refer to each other by path, so the path map is
+centralized here instead of rebuilt slightly differently in each stage. Keeping
+this map in one place avoids drift between case, plan, evidence, report, LLM,
+and trace artifacts while preserving the existing artifact names.
 """
 
 from __future__ import annotations
@@ -23,7 +25,12 @@ def build_artifact_refs(
     findings_path: Path | None = None,
     report_path: Path | None = None,
 ) -> dict[str, str | None]:
-    """Build the standard artifact path map used by downstream summaries."""
+    """Build the standard artifact path map used by downstream summaries.
+
+    Each downstream artifact should point to the same case, plan, ledger, report,
+    and trace paths. Passing paths through this helper avoids subtle naming drift
+    when optional baseline or LLM artifacts are present.
+    """
     artifacts: dict[str, str | None] = {
         "investigation_case": case_path.as_posix(),
         "dataset_profile": profile_path.as_posix(),

@@ -1,7 +1,13 @@
 """Safe aggregate current-vs-baseline comparison builders.
 
-Baseline comparison is aggregate-only by design. It records review signals
-without writing raw rows, example values, category labels, or missing date lists.
+A baseline comparison answers a plain question: does the current file look
+different from a previous or expected file in aggregate ways a reviewer should
+inspect? This module compares row counts, schema shape, nulls, numeric totals,
+date ranges, category shape, and duplicate signals.
+
+The comparison is intentionally not a final finding. It writes aggregate signals
+only and excludes raw rows, example values, category labels, duplicated values,
+and missing date lists so the baseline artifact can be reviewed safely.
 """
 
 from __future__ import annotations
@@ -65,8 +71,12 @@ def build_baseline_comparison(
         "created_at_utc": datetime.now(UTC).isoformat(),
         "current": _source_metadata(current_dataset),
         "baseline": _source_metadata(baseline_dataset),
-        "row_count_comparison": _row_count_comparison(current_dataset, baseline_dataset),
-        "column_count_comparison": _column_count_comparison(current_dataset, baseline_dataset),
+        "row_count_comparison": _row_count_comparison(
+            current_dataset, baseline_dataset
+        ),
+        "column_count_comparison": _column_count_comparison(
+            current_dataset, baseline_dataset
+        ),
         "schema_comparison": _schema_comparison(current_profile, baseline_profile),
         "null_comparison": _null_comparison(current_profile, baseline_profile),
         "numeric_comparison": _numeric_comparison(
@@ -78,9 +88,13 @@ def build_baseline_comparison(
         "category_shape_comparison": _category_shape_comparison(
             current_dataset, baseline_dataset, current_columns, baseline_columns
         ),
-        "duplicate_comparison": _duplicate_comparison(current_dataset, baseline_dataset),
+        "duplicate_comparison": _duplicate_comparison(
+            current_dataset, baseline_dataset
+        ),
         "general_summary": _general_summary(current_profile, baseline_profile),
-        "comparison_signal_count": _comparison_signal_count(current_profile, baseline_profile),
+        "comparison_signal_count": _comparison_signal_count(
+            current_profile, baseline_profile
+        ),
         "compared_column_count": len(shared_column_names),
         "safety_notes": SAFETY_NOTES,
         "limitations": LIMITATIONS,
@@ -166,18 +180,30 @@ def _schema_comparison(
     baseline_names = [str(name) for name in baseline_dataset.get("column_names", [])]
     shared = sorted(set(current_names) & set(baseline_names))
     kind_deltas = _kind_changes(current_profile, baseline_profile, shared)
+    # Column-name deltas are bounded so the artifact stays readable and does not
+    # become a large schema dump for wide files.
     return {
         "current_column_count": int(current_dataset.get("column_count", 0)),
         "baseline_column_count": int(baseline_dataset.get("column_count", 0)),
-        "added_columns": sorted(set(current_names) - set(baseline_names))[:DETAIL_LIMIT],
-        "removed_columns": sorted(set(baseline_names) - set(current_names))[:DETAIL_LIMIT],
+        "added_columns": sorted(set(current_names) - set(baseline_names))[
+            :DETAIL_LIMIT
+        ],
+        "removed_columns": sorted(set(baseline_names) - set(current_names))[
+            :DETAIL_LIMIT
+        ],
         "shared_column_count": len(shared),
-        "duplicate_column_name_count_current": len(current_dataset.get("duplicate_column_names", [])),
+        "duplicate_column_name_count_current": len(
+            current_dataset.get("duplicate_column_names", [])
+        ),
         "duplicate_column_name_count_baseline": len(
             baseline_dataset.get("duplicate_column_names", [])
         ),
-        "empty_column_name_count_current": len(current_dataset.get("empty_column_names", [])),
-        "empty_column_name_count_baseline": len(baseline_dataset.get("empty_column_names", [])),
+        "empty_column_name_count_current": len(
+            current_dataset.get("empty_column_names", [])
+        ),
+        "empty_column_name_count_baseline": len(
+            baseline_dataset.get("empty_column_names", [])
+        ),
         "inferred_kind_changes": kind_deltas[:DETAIL_LIMIT],
         "inferred_kind_change_count": len(kind_deltas),
     }
@@ -206,6 +232,8 @@ def _null_comparison(
             }
         )
     non_zero_deltas = [delta for delta in deltas if delta["delta_percentage"] != 0]
+    # Keep only the largest aggregate changes. The list contains column names and
+    # counts, never raw cell values.
     detail_deltas = sorted(
         non_zero_deltas,
         key=lambda delta: abs(float(delta["delta_percentage"])),
@@ -309,9 +337,13 @@ def _date_comparison(
         for delta in deltas
         if delta["range_changed"] or delta["missing_daily_period_delta"] != 0
     ]
+    # Date comparison reports ranges and missing-period counts only. It does not
+    # write the actual missing dates, which could reveal business activity.
     return {
         "columns_compared": len(shared),
-        "columns_with_range_change": sum(1 for delta in deltas if delta["range_changed"]),
+        "columns_with_range_change": sum(
+            1 for delta in deltas if delta["range_changed"]
+        ),
         "columns_with_missing_daily_period_delta": sum(
             1 for delta in deltas if delta["missing_daily_period_delta"] != 0
         ),
@@ -327,7 +359,9 @@ def _category_shape_comparison(
     baseline_columns: list[dict[str, Any]],
 ) -> dict[str, Any]:
     current_names = _category_column_names(current_columns, current_dataset.row_count)
-    baseline_names = _category_column_names(baseline_columns, baseline_dataset.row_count)
+    baseline_names = _category_column_names(
+        baseline_columns, baseline_dataset.row_count
+    )
     current_by_name = {str(column.get("name")): column for column in current_columns}
     baseline_by_name = {str(column.get("name")): column for column in baseline_columns}
     shared = sorted(current_names & baseline_names)
@@ -358,6 +392,8 @@ def _category_shape_comparison(
         or delta["current_high_cardinality_signal"]
         != delta["baseline_high_cardinality_signal"]
     ]
+    # Category comparison uses shape only. Category labels and top values are
+    # deliberately excluded because they are often sensitive business values.
     return {
         "columns_compared": len(shared),
         "columns_with_unique_count_delta": sum(
@@ -401,6 +437,8 @@ def _duplicate_comparison(
             }
         )
     non_zero = [delta for delta in deltas if delta["duplicate_count_delta"] != 0]
+    # Duplicate comparison counts repeated values but never writes which values
+    # repeated. The evidence remains useful without exposing identifiers.
     return {
         "candidate_columns_compared": len(shared),
         "columns_with_higher_duplicate_count": sum(
@@ -440,10 +478,15 @@ def _general_summary(
         - _numeric_kind_count(baseline_kinds),
         "datetime_column_count_delta": current_kinds.get("datetime", 0)
         - baseline_kinds.get("datetime", 0),
-        "text_column_count_delta": current_kinds.get("text", 0) - baseline_kinds.get("text", 0),
-        "duplicate_column_name_count_delta": len(current_dataset.get("duplicate_column_names", []))
+        "text_column_count_delta": current_kinds.get("text", 0)
+        - baseline_kinds.get("text", 0),
+        "duplicate_column_name_count_delta": len(
+            current_dataset.get("duplicate_column_names", [])
+        )
         - len(baseline_dataset.get("duplicate_column_names", [])),
-        "empty_column_name_count_delta": len(current_dataset.get("empty_column_names", []))
+        "empty_column_name_count_delta": len(
+            current_dataset.get("empty_column_names", [])
+        )
         - len(baseline_dataset.get("empty_column_names", [])),
     }
 
@@ -469,7 +512,9 @@ def _columns_by_name(profile: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _shared_column_names(
     current_profile: dict[str, Any], baseline_profile: dict[str, Any]
 ) -> list[str]:
-    return sorted(set(_columns_by_name(current_profile)) & set(_columns_by_name(baseline_profile)))
+    return sorted(
+        set(_columns_by_name(current_profile)) & set(_columns_by_name(baseline_profile))
+    )
 
 
 def _kind_changes(
@@ -479,8 +524,12 @@ def _kind_changes(
     baseline_by_name = _columns_by_name(baseline_profile)
     changes = []
     for name in shared:
-        current_kind = str(current_by_name[name].get("inferred_kind", "mixed_or_unknown"))
-        baseline_kind = str(baseline_by_name[name].get("inferred_kind", "mixed_or_unknown"))
+        current_kind = str(
+            current_by_name[name].get("inferred_kind", "mixed_or_unknown")
+        )
+        baseline_kind = str(
+            baseline_by_name[name].get("inferred_kind", "mixed_or_unknown")
+        )
         if current_kind != baseline_kind:
             changes.append(
                 {
@@ -493,7 +542,11 @@ def _kind_changes(
 
 
 def _columns_with_kinds(columns: list[dict[str, Any]], kinds: set[str]) -> set[str]:
-    return {str(column.get("name")) for column in columns if column.get("inferred_kind") in kinds}
+    return {
+        str(column.get("name"))
+        for column in columns
+        if column.get("inferred_kind") in kinds
+    }
 
 
 def _category_column_names(columns: list[dict[str, Any]], row_count: int) -> set[str]:
@@ -559,7 +612,10 @@ def _series(dataset: LoadedDataset, name: str) -> pd.Series | None:
 
 
 def _kind_counts(profile: dict[str, Any]) -> Counter[str]:
-    return Counter(str(column.get("inferred_kind", "mixed_or_unknown")) for column in profile.get("columns", []))
+    return Counter(
+        str(column.get("inferred_kind", "mixed_or_unknown"))
+        for column in profile.get("columns", [])
+    )
 
 
 def _numeric_kind_count(kinds: Counter[str]) -> int:
@@ -567,7 +623,9 @@ def _numeric_kind_count(kinds: Counter[str]) -> int:
 
 
 def _total_null_cells(profile: dict[str, Any]) -> int:
-    return sum(int(column.get("null_count", 0)) for column in profile.get("columns", []))
+    return sum(
+        int(column.get("null_count", 0)) for column in profile.get("columns", [])
+    )
 
 
 def _percentage(numerator: int | float, denominator: int | float) -> float:
