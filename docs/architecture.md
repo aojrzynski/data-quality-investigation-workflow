@@ -1,56 +1,51 @@
 # Architecture
 
-Data Quality Investigation Workflow is a local-first CLI. It reads local files, builds safe aggregate artifacts, and keeps each step deterministic so a human reviewer can inspect how the investigation moved from issue statement to evidence and recommended checks.
+Data Quality Investigation Workflow is a local-first CLI that turns an issue statement and optional local datasets into deterministic review material.
 
-## Flow
+## Final v1 flow
 
 ```text
-CLI
--> intake
--> profiling
--> case file
--> planning
--> baseline comparison
--> checks
+case
+-> current profile if input exists
+-> optional baseline profile
+-> plan
+-> optional baseline comparison
 -> evidence ledger
--> hypotheses
--> findings
--> Markdown report
+-> hypothesis tracker
+-> investigation findings
+-> deterministic Markdown report
+-> optional safe LLM notes
 -> trace
 ```
 
-Some steps are conditional:
+The main sequence is coordinated by `src/data_quality_investigation_workflow/cli.py`. Each stage writes a small artifact that can be opened directly.
 
-- Baseline profiling and baseline comparison run only when `--baseline` is supplied.
-- Evidence, hypotheses, findings, and the Markdown report run only when both `--input` and `--issue` are supplied.
-- Plan-only runs write case, plan, and trace artifacts only.
-- Missing-issue input runs write a current profile, case, plan, not-executed evidence ledger, and trace, but no hypotheses, findings, or report.
+## Stage overview
 
-## Module responsibilities
+1. **Case** records the issue, available inputs, workflow scope, artifact paths, and authority boundaries.
+2. **Current profile** reads a local CSV or Excel file and records aggregate profile information.
+3. **Baseline profile** does the same for an optional baseline file.
+4. **Plan** uses deterministic keyword rules to choose a route and planned checks.
+5. **Baseline comparison** records aggregate current-vs-baseline signals when a baseline is supplied.
+6. **Evidence ledger** records deterministic aggregate checks and checks not run.
+7. **Hypothesis tracker** maps evidence IDs to cautious hypotheses.
+8. **Investigation findings** summarize evidence-supported signals and human review prompts.
+9. **Markdown report** summarizes the deterministic JSON artifacts for easier reading.
+10. **Optional LLM notes** are downstream and separate. They are written only with `--llm-notes` and use only `llm_safe_input_summary.json`.
+11. **Trace** records concise run status, stage, metadata, and artifact paths.
 
-- `cli.py` coordinates arguments, local file loading, artifact sequencing, and user-facing output.
-- `intake.py` loads CSV/XLSX/XLSM files from local paths.
-- `profiling.py` builds safe aggregate dataset profiles.
-- `case_file.py` records case context, artifact references, workflow status, and authority boundaries.
-- `issue_classifier.py` selects deterministic planning routes from keyword rules.
-- `planning.py` writes route plans and safe candidate-column choices.
-- `baseline.py` writes baseline profiles and aggregate current-vs-baseline comparisons.
-- `checks.py` executes deterministic current and baseline-aware aggregate checks.
-- `evidence.py` writes the aggregate-only evidence ledger.
-- `hypotheses.py` maps evidence IDs into bounded route-specific hypotheses.
-- `findings.py` creates review-oriented finding summaries and recommended human checks.
-- `reporting.py` renders `investigation_report.md` from already-built JSON artifacts.
-- `trace.py` writes concise metadata and artifact paths.
-- `workflow_scope.py` centralizes implemented scope and authority-boundary text.
+## Why the stages are separate
 
-## Why JSON artifacts are written before Markdown
+Separate artifacts make the workflow easier to inspect. If a report says there is an evidence-supported signal, a reviewer can open `evidence_ledger.json` and find the evidence ID behind it. If a stage did not run, `investigation_trace.json` explains the status.
 
-The JSON artifacts are the structured source of truth. The Markdown report is a review layer generated after findings exist. This keeps report generation simple, deterministic, and standard-library-only, while allowing reviewers or tests to inspect the underlying case, profile, plan, evidence, hypotheses, and findings independently.
+## Deterministic core
 
-## Trace design
+The deterministic path does not call an LLM and does not require `OPENAI_API_KEY`. It relies on local file intake, aggregate profiling, route selection, current-dataset checks, and optional aggregate baseline comparison.
 
-The trace remains concise. It records status, stage, route, artifact paths, dataset metadata, baseline availability, evidence counts, hypothesis counts, finding counts, and report metadata when a report is written. It does not duplicate full report content, full evidence items, full hypotheses, or full findings.
+## Optional LLM notes
 
-## PR #9 optional LLM notes layer
+Optional LLM notes are not part of the evidence source. They are generated after deterministic artifacts exist, from a safe aggregate summary. Validation can fail, and failed validation is recorded without writing Markdown notes.
 
-After deterministic profiling, planning, evidence, hypotheses, findings, and `investigation_report.md` are written, an explicit `--llm-notes` opt-in can create a bounded safe input summary and optional non-authoritative LLM notes. This layer is downstream of deterministic artifacts only; it does not generate evidence, classify the issue authoritatively, identify root cause, or replace the deterministic report.
+## Safety and authority boundaries
+
+The architecture keeps raw rows out of artifacts and prompts. It also keeps authority boundaries visible: the workflow does not identify root cause, confirm an issue as final, approve a dataset, certify a dataset, or replace human review.

@@ -1,4 +1,8 @@
-"""Markdown investigation report builders and writers."""
+"""Deterministic Markdown report builders.
+
+The report summarizes existing JSON artifacts for human review. It does not add
+new evidence or make an authority decision.
+"""
 
 from __future__ import annotations
 

@@ -1,41 +1,44 @@
-# Optional LLM Investigation Notes
+# Optional LLM notes
 
-PR #9 adds optional bounded LLM investigation notes. They are disabled by default and are never required for the deterministic workflow.
+Optional LLM notes are disabled by default. The normal deterministic workflow does not call an LLM and does not require `OPENAI_API_KEY`.
 
-## Enablement
+## What they are for
 
-Install the optional extra and set an API key before using `--llm-notes`:
+LLM notes can provide bounded reviewer notes, follow-up questions, communication notes, and limitations to keep visible. They are secondary to `investigation_report.md` and the deterministic JSON artifacts.
+
+## Requirements
+
+Install the LLM extra and set an API key:
 
 ```bash
 python -m pip install -e ".[dev,llm]"
 export OPENAI_API_KEY="..."
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --llm-notes --output-dir outputs/customer_llm_notes_run
 ```
 
-Windows PowerShell:
+PowerShell:
 
 ```powershell
 $env:OPENAI_API_KEY="..."
 ```
 
-## Safety model
+Then pass `--llm-notes`:
 
-The LLM receives only `llm_safe_input_summary.json`, a deterministic safe summary assembled from already-written aggregate artifacts. It does not receive raw rows, sampled rows, example values, top values, distinct value lists, duplicated values, category labels, full distributions, row numbers, or raw failing records.
+```bash
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --llm-notes --output-dir outputs/customer_llm_notes_run
+```
 
-The notes are non-authoritative. They may suggest review notes, follow-up questions, and human checks, but they do not identify root cause, confirm an issue, approve or certify a dataset, fix data, trust a dataset, or make legal, compliance, privacy, or governance verdicts.
+You may override the model with `--llm-model` or the `DQIW_LLM_MODEL` environment variable.
 
-## Artifacts
+## What the LLM sees
 
-When validation passes, `--llm-notes` writes:
+The LLM uses only `llm_safe_input_summary.json`. That file is built from deterministic aggregate artifacts.
 
-- `llm_safe_input_summary.json` — the bounded aggregate summary sent to the LLM.
-- `llm_investigation_notes.json` — structured notes plus validation metadata.
-- `llm_investigation_notes.md` — a human-readable secondary notes file.
+It does not include raw rows, sampled rows, example values, top values, distinct value lists, duplicated values, category labels, row numbers, raw failing records, or generated code.
 
-`investigation_report.md` remains deterministic and primary.
+## Validation can fail
 
-## Validation and failure modes
+LLM output must be valid JSON in the expected schema. It must stay within length limits and avoid blocked raw-value markers or authority language. If validation fails, the workflow records validation errors in `llm_investigation_notes.json` and does not write `llm_investigation_notes.md`.
 
-The response must be valid JSON with the required notes keys. The workflow caps list sizes and string lengths, blocks raw-value markers and authoritative/verdict language, and avoids writing the raw model response when validation fails. If validation fails, `llm_investigation_notes.json` records `llm_status: failed_validation` with safe error summaries, and no successful Markdown notes are written.
+## Authority boundary
 
-If the optional `openai` package is missing, install the `llm` extra. If `OPENAI_API_KEY` is missing, the CLI exits cleanly with a user-facing error. The OpenAI path uses the Responses API without tools: no web search, file search, code interpreter, file uploads, function calling, MCP, or streaming requirement.
+LLM notes are optional and non-authoritative. They do not identify root cause, confirm the issue as final, approve a dataset, certify a dataset, trust a dataset, fix data, or make legal, compliance, privacy, or governance verdicts. Human review remains the final authority.

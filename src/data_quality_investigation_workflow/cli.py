@@ -1,4 +1,8 @@
-"""Command line interface for dataset intake and safe profiling."""
+"""Command line entry point for the local investigation workflow.
+
+The CLI keeps artifact-writing order explicit so later review material can
+reference deterministic evidence that has already been written.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from pathlib import Path
 from typing import Sequence
 
 from data_quality_investigation_workflow import __version__
+from data_quality_investigation_workflow.artifacts import build_artifact_refs
 from data_quality_investigation_workflow.baseline import (
     BASELINE_COMPARISON_FILENAME,
     BASELINE_PROFILE_FILENAME,
@@ -127,7 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the CLI."""
+    """Run the workflow and return a process exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -519,24 +524,18 @@ def _artifact_refs(
     findings_path: Path | None,
     report_path: Path | None = None,
 ) -> dict[str, str | None]:
-    artifacts: dict[str, str | None] = {
-        "investigation_case": case_path.as_posix(),
-        "dataset_profile": profile_path.as_posix(),
-        "investigation_plan": plan_path.as_posix(),
-        "evidence_ledger": ledger_path.as_posix(),
-        "investigation_trace": trace_path.as_posix(),
-    }
-    if baseline_profile_path is not None:
-        artifacts["baseline_profile"] = baseline_profile_path.as_posix()
-    if baseline_comparison_path is not None:
-        artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
-    if hypothesis_tracker_path is not None:
-        artifacts["hypothesis_tracker"] = hypothesis_tracker_path.as_posix()
-    if findings_path is not None:
-        artifacts["investigation_findings"] = findings_path.as_posix()
-    if report_path is not None:
-        artifacts["investigation_report"] = report_path.as_posix()
-    return artifacts
+    return build_artifact_refs(
+        case_path=case_path,
+        profile_path=profile_path,
+        plan_path=plan_path,
+        ledger_path=ledger_path,
+        trace_path=trace_path,
+        baseline_profile_path=baseline_profile_path,
+        baseline_comparison_path=baseline_comparison_path,
+        hypothesis_tracker_path=hypothesis_tracker_path,
+        findings_path=findings_path,
+        report_path=report_path,
+    )
 
 
 def _load_baseline_dataset(path: Path, sheet: str | None):

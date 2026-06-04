@@ -1,4 +1,8 @@
-"""Local dataset intake for CSV and Excel files."""
+"""Local CSV and Excel intake helpers.
+
+The workflow is local-first: this module reads user-supplied files and returns
+metadata needed by aggregate profiling without adding connectors.
+"""
 
 from __future__ import annotations
 

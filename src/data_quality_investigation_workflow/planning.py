@@ -1,4 +1,8 @@
-"""Investigation plan artifact builders and writers."""
+"""Investigation plan artifact builders.
+
+Plans make the deterministic route, candidate columns, planned checks, missing
+inputs, and limitations visible before evidence is interpreted.
+"""
 
 from __future__ import annotations
 
@@ -240,7 +244,7 @@ def _inputs(
             baseline_comparison_path.as_posix() if baseline_comparison_path else None
         ),
         "baseline_note": (
-            "Baseline comparison aggregate evidence is executable in PR #6."
+            "Baseline comparison aggregate evidence is executable when a baseline is supplied."
             if baseline_available
             else "No baseline was supplied for this run."
         ),
@@ -248,7 +252,7 @@ def _inputs(
             "issue statement",
             "current dataset profile",
             "current raw dataset for executable deterministic checks",
-            "baseline dataset for executable PR #6 baseline comparisons",
+            "baseline dataset for executable baseline comparisons",
         ],
         "available_inputs": [
             input_name
@@ -306,11 +310,11 @@ def _planned_checks(issue_type: str, *, baseline_available: bool) -> list[dict[s
                 not requires_baseline or baseline_available
             ),
             "execution_stage": (
-                "pr6_baseline_comparison" if requires_baseline else "pr5_current_dataset_checks"
+                "baseline_comparison" if requires_baseline else "current_dataset_checks"
             ),
             "requires_later_interpretation": True,
             "not_run_reason": (
-                "The plan records intended checks. PR #6 can record aggregate baseline comparison signals when baseline is supplied, but interpretation remains human-review-led."
+                "The plan records intended checks. Baseline comparison can record aggregate signals when baseline is supplied, but interpretation remains human-review-led."
             ),
         }
         for check_id, check_name, purpose, planned_outputs, requires_baseline in _CHECKS[issue_type]

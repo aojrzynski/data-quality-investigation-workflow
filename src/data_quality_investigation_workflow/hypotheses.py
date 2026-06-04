@@ -1,4 +1,8 @@
-"""Hypothesis tracker artifact builders and writers."""
+"""Cautious hypothesis tracker builders.
+
+Hypotheses connect route-specific questions to evidence IDs so reviewers can
+trace interpretation back to deterministic aggregate checks.
+"""
 
 from __future__ import annotations
 

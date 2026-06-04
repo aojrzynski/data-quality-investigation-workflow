@@ -1,4 +1,8 @@
-"""Deterministic issue classification for investigation planning."""
+"""Deterministic issue classification helpers.
+
+Classification chooses a planning route from plain keyword rules. It is a
+planning aid only, not evidence that the reported issue exists.
+"""
 
 from __future__ import annotations
 
@@ -97,7 +101,7 @@ ROUTE_REASONS = {
     "category_shift": "The issue statement suggests a category, status, segment, region, or distribution shift.",
     "total_change": "The issue statement suggests a changed count, volume, sum, or total.",
     "schema_change": "The issue statement suggests a changed schema, column, field, or header.",
-    "general_suspected_issue": "The issue statement does not match a supported PR #4 route keyword pattern.",
+    "general_suspected_issue": "The issue statement does not match a supported route keyword pattern.",
     "missing_issue_statement": "No issue statement was supplied, so meaningful route selection is not ready.",
 }
 

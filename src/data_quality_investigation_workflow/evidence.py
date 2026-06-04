@@ -1,4 +1,8 @@
-"""Evidence ledger artifact builders and writers."""
+"""Evidence ledger builders.
+
+The ledger records deterministic aggregate evidence and checks not run. Later
+artifacts reference evidence IDs instead of copying raw payloads.
+"""
 
 from __future__ import annotations
 

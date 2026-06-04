@@ -22,7 +22,10 @@ IMPLEMENTED_SCOPE = [
 ]
 
 NOT_YET_IMPLEMENTED = [
-    "source comment/docstring cleanup",
+    "database/cloud connectors",
+    "automated remediation",
+    "root-cause decisions",
+    "final dataset approval",
 ]
 
 AUTHORITY_BOUNDARY = [

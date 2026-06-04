@@ -1,41 +1,79 @@
 # Demo workflow
 
-The repository includes synthetic current and baseline CSV files under `examples/`:
+This guided demo uses the example customer quality snapshots included in the repository.
 
-- current file: `examples/customer_quality_snapshot.csv`
-- baseline file: `examples/customer_quality_snapshot_baseline.csv`
+## 1. Install the package
 
-The demo uses column names and aggregate signals only. It does not include raw dataset values in this walkthrough.
+```bash
+python -m pip install -e ".[dev]"
+```
 
-## Run the baseline demo
+## 2. Run the baseline demo
 
 ```bash
 dq-investigate --input examples/customer_quality_snapshot.csv --baseline examples/customer_quality_snapshot_baseline.csv --issue "Nulls increased in the customer email field" --output-dir outputs/baseline_report_run
 ```
 
-## Artifacts generated
+This writes deterministic local artifacts. No LLM is used and no API key is required.
 
-The run writes:
+## 3. Open the report
 
-- `investigation_case.json`
-- `dataset_profile.json`
-- `baseline_profile.json`
-- `investigation_plan.json`
-- `baseline_comparison.json`
-- `evidence_ledger.json`
-- `hypothesis_tracker.json`
-- `investigation_findings.json`
-- `investigation_report.md`
-- `investigation_trace.json`
+Open:
 
-## How to use the report
+```text
+outputs/baseline_report_run/investigation_report.md
+```
 
-Open `outputs/baseline_report_run/investigation_report.md` on GitHub or in a Markdown viewer. The report gives a reviewer-friendly summary of issue context, dataset counts, baseline availability, artifact paths, evidence IDs, hypothesis statuses, supported/not-supported/unclear signals, limitations, and recommended checks.
+Use it for the fastest readable overview of the issue, route, evidence summary, findings summary, limitations, and next steps.
 
-## What the report does not decide
+## 4. Inspect the trace
 
-The report does not determine root cause, approve the dataset, certify the dataset, make legal/compliance/privacy/governance verdicts, or state that the dataset is production-ready. It is a review aid built from deterministic aggregate artifacts.
+Open:
 
-## Optional LLM notes in a demo
+```text
+outputs/baseline_report_run/investigation_trace.json
+```
 
-For demos with an API key, run the deterministic workflow with `--llm-notes` to add separate optional notes files. The deterministic `investigation_report.md` remains the primary report; `llm_investigation_notes.md` is secondary reviewer assistance generated only from `llm_safe_input_summary.json`.
+Use it to confirm the run status, stage, artifact paths, and concise metadata.
+
+## 5. Inspect the evidence ledger
+
+Open:
+
+```text
+outputs/baseline_report_run/evidence_ledger.json
+```
+
+Use it to review deterministic aggregate evidence items and checks not run. Evidence IDs in later artifacts point back here.
+
+## 6. Inspect findings
+
+Open:
+
+```text
+outputs/baseline_report_run/investigation_findings.json
+```
+
+Use it to see evidence-supported signals, unclear items, and suggested human checks.
+
+## 7. Optional LLM notes
+
+If you want optional notes, install the LLM extra and provide an API key:
+
+```bash
+python -m pip install -e ".[dev,llm]"
+export OPENAI_API_KEY="..."
+dq-investigate --input examples/customer_quality_snapshot.csv --baseline examples/customer_quality_snapshot_baseline.csv --issue "Nulls increased in the customer email field" --llm-notes --output-dir outputs/baseline_llm_notes_run
+```
+
+PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY="..."
+```
+
+Open `llm_safe_input_summary.json` first to see the aggregate-only input. Open `llm_investigation_notes.md` only if validation succeeds.
+
+## 8. What not to conclude
+
+Do not conclude that the tool has identified root cause, confirmed the issue as final, approved the dataset, certified the dataset, or replaced human review. The output is review material for the next human checks.

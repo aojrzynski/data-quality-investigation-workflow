@@ -1,41 +1,47 @@
 # Roadmap
 
-This roadmap describes the intended pull request sequence for building the Data Quality Investigation Workflow. It is deliberately high level so each PR can stay focused and reviewable.
+This repository now represents a finished v1 scope for the local-first Data Quality Investigation Workflow.
 
-## Planned PR sequence
+## Implemented v1 scope
 
-- **PR #1: repo scaffold and trace stub — implemented**
-  Added the Python package scaffold, `dq-investigate` CLI entry point, scaffold trace artifact, tests, CI, README, and this roadmap.
+PR #1 through PR #9 built the main workflow:
 
-- **PR #2: dataset intake and safe profiling — implemented**
-  Added local CSV/XLSX/XLSM dataset intake, optional Excel sheet selection, safe aggregate `dataset_profile.json`, and profiled-run trace metadata without writing raw rows to artifacts or sending raw rows to any external service.
+- CLI entry point and output directory handling;
+- local CSV/Excel intake;
+- safe aggregate dataset profiling;
+- investigation case file;
+- deterministic issue classification and planning;
+- safe aggregate baseline comparison;
+- deterministic evidence ledger;
+- hypothesis tracker;
+- investigation findings;
+- deterministic Markdown report;
+- optional bounded LLM notes;
+- concise investigation trace.
 
-- **PR #3: issue intake and investigation case file — implemented**
-  Added `investigation_case.json` as the issue-led case file foundation, records whether input was supplied, references dataset profile and trace artifacts when available, and preserved the no-investigation/no-findings boundary before planning classification was added.
+PR #10 polished documentation, comments, docstrings, and small maintainability details so the repository reads as current v1 documentation rather than a build diary.
 
-- **PR #4: investigation planning and route selection — implemented**
-  Added deterministic issue classification for planning purposes only, selected planned routes, and wrote `investigation_plan.json` without running checks.
+## Current non-goals
 
-- **PR #5: deterministic checks and evidence ledger — implemented**
-  Added deterministic current-dataset checks for selected issue routes and recorded aggregate-only results in `evidence_ledger.json`.
+The v1 workflow does not include:
 
-- **PR #6: baseline comparison support — implemented**
-  Added support for comparing the current dataset against a supplied baseline dataset with aggregate-only baseline comparison evidence.
+- database, cloud, or SaaS connectors;
+- remediation or data fixing;
+- root-cause decisions;
+- final dataset approval;
+- legal, compliance, privacy, or governance verdicts;
+- generated code execution;
+- raw-row prompts or raw-row artifacts.
 
-- **PR #7: hypothesis tracker and findings builder — implemented**
-  Added `hypothesis_tracker.json` and `investigation_findings.json` for input + issue runs, mapping deterministic evidence IDs into cautious route-specific hypotheses and review-oriented finding summaries.
+## Possible future ideas
 
-- **PR #8: Markdown report and deeper docs — implemented**
-  Added `investigation_report.md` for input + issue runs and expanded README/docs for architecture, artifacts, commands, safety boundaries, and demo usage.
+These are future ideas only. They are not implemented in v1.
 
-- **PR #9: optional bounded LLM investigation notes — current / implemented**
-  Added optional bounded LLM-generated notes over safe aggregate artifacts only. LLM output is validated and not authoritative.
+- Richer deterministic issue-routing rules.
+- Configurable date cadence instead of the current daily-cadence assumption.
+- A policy/config file for thresholds.
+- More baseline comparison options.
+- Optional export formats.
+- Database connectors only if safe, explicit, local-first where possible, and clearly configured.
 
-- **PR #10: source comment/docstring pass — future**
-  Review code comments and docstrings for clarity after the main workflow pieces are in place.
-
-## PR #9 status
-
-Implemented: optional bounded LLM investigation notes via `--llm-notes`, safe input summary, validated JSON and Markdown notes artifacts, optional `llm` dependency extra, and docs/tests for the non-authoritative LLM path.
-
-Future PR #10: source comment and docstring cleanup remains future work.
+Future work should keep the same boundaries: deterministic evidence first, safe aggregate artifacts, optional non-authoritative LLM notes, and human review as the final authority.

@@ -1,58 +1,45 @@
 # Safety boundaries
 
-Data Quality Investigation Workflow is designed around deterministic aggregate artifacts and human review.
+The workflow is designed to produce safe aggregate review material. It is not designed to copy raw data into artifacts, prompts, or reports.
 
-## Not included
+## What is allowed
 
-The current implementation does not write or send:
+Artifacts may include:
+
+- column names;
+- aggregate counts;
+- percentages;
+- inferred data kinds;
+- evidence IDs;
+- hypothesis IDs;
+- artifact paths;
+- human review prompts.
+
+These are enough to describe an evidence-supported signal without exposing row-level records.
+
+## What is not included
+
+Artifacts and optional LLM prompts do not include:
 
 - raw rows;
 - sampled rows;
-- first rows or last rows;
 - example values;
 - top values;
 - distinct value lists;
-- raw failing records;
 - duplicated values;
 - category labels;
-- full category distributions;
 - row numbers;
-- generated code;
-- LLM prompts or LLM output.
+- raw failing records;
+- generated code.
 
-It also does not decide:
+## Why top values and examples are avoided
 
-- root cause;
-- legal verdicts;
-- compliance verdicts;
-- privacy verdicts;
-- governance verdicts;
-- dataset approval, certification, trust, or production readiness.
+Top values, example values, and category labels can reveal real people, customers, accounts, locations, or business terms. Even when they look harmless, they are still row-derived values. The workflow avoids them so review material stays aggregate-only.
 
-## Allowed content
+## Optional LLM boundary
 
-The artifacts may include:
+No LLM is used unless `--llm-notes` is supplied. When it is supplied, the model receives only `llm_safe_input_summary.json`. That summary is built from deterministic aggregate artifacts and is validated before use.
 
-- column names;
-- row counts;
-- column counts;
-- aggregate counts;
-- aggregate percentages;
-- inferred data kinds;
-- safe schema metadata;
-- evidence IDs;
-- hypothesis IDs;
-- signal IDs;
-- recommended human review checks.
+## Authority boundary
 
-## LLM boundary
-
-No LLM is used unless `--llm-notes` is explicitly supplied. Optional bounded LLM notes use only safe aggregate artifacts and remain separate from deterministic evidence generation.
-
-## Human authority
-
-The workflow helps reviewers investigate. It does not replace human judgment, approve datasets, certify datasets, or make legal/compliance/privacy/governance decisions. Human review remains the final authority.
-
-## Optional LLM notes safety
-
-`--llm-notes` is explicit opt-in and disabled by default. The LLM receives only `llm_safe_input_summary.json`, built from deterministic safe aggregate artifacts. It is not given raw rows, sampled rows, example values, top values, distinct value lists, duplicated values, category labels, full distributions, row numbers, or raw failing records. LLM output is validated before successful notes are written and remains non-authoritative. It must not identify root cause, confirm an issue, approve, certify, fix, trust, or make legal, compliance, privacy, or governance verdicts. No LLM tools, file uploads, web search, file search, code interpreter, function calling, or MCP are used.
+The safety boundary does not make the tool a compliance system. The workflow does not identify root cause, approve a dataset, certify a dataset, make legal or privacy verdicts, or replace human review.
