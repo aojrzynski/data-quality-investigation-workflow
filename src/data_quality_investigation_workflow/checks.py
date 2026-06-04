@@ -1,4 +1,8 @@
-"""Deterministic current-dataset evidence checks."""
+"""Deterministic aggregate issue checks.
+
+Checks record evidence-supported signals for review. They avoid raw records and
+keep route-specific assumptions, such as daily date cadence, visible.
+"""
 
 from __future__ import annotations
 
@@ -44,7 +48,7 @@ def run_route_checks(
     *,
     baseline_comparison: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run deterministic current-dataset and optional PR #6 baseline checks."""
+    """Run deterministic current-dataset and optional baseline checks."""
     route_name = str(investigation_plan.get("route", {}).get("route_name", ""))
     if route_name == "missing_issue_statement":
         return {
@@ -213,7 +217,7 @@ def _date_items(loaded_dataset: LoadedDataset, profile: dict[str, Any], plan: di
             "status": "executed",
             "signal": "present" if missing_total else "absent",
             "signal_strength": "medium" if missing_total else "low",
-            "summary": "A daily-cadence aggregate gap signal is present. PR #5 does not write missing date lists." if missing_total else "No daily-cadence aggregate gap was detected in parsed candidate date columns.",
+            "summary": "A daily-cadence aggregate gap signal is present. Missing date lists are not written." if missing_total else "No daily-cadence aggregate gap was detected in parsed candidate date columns.",
             "related_columns": [name for name, _dates in parsed],
             "metrics": metrics,
             "limitations": _standard_limitations("Daily cadence is assumed only for planning evidence."),

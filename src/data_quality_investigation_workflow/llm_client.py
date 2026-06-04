@@ -1,4 +1,8 @@
-"""Optional OpenAI Responses API client for bounded investigation notes."""
+"""Optional OpenAI client wrapper for bounded LLM notes.
+
+The OpenAI import stays optional through the llm extra. Deterministic runs do
+not need OpenAI credentials or the OpenAI package.
+"""
 
 from __future__ import annotations
 

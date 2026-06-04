@@ -1,4 +1,8 @@
-"""Safe aggregate dataset profiling."""
+"""Safe aggregate dataset profiling.
+
+Profiles describe dataset shape and column-level aggregates without writing raw
+rows, sampled values, top values, or distinct value lists.
+"""
 
 from __future__ import annotations
 

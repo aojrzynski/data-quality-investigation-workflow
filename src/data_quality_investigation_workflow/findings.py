@@ -1,4 +1,8 @@
-"""Cautious investigation finding summary builders and writers."""
+"""Review-oriented finding summary builders.
+
+Findings summarize evidence-supported signals and human checks. They are
+interpretation aids, not final decisions.
+"""
 
 from __future__ import annotations
 

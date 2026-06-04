@@ -1001,7 +1001,7 @@ def _evidence_item(ledger: dict[str, Any], check_id: str) -> dict[str, Any] | No
     )
 
 
-def test_pr7_current_duplicate_run_writes_hypotheses_and_findings(
+def test_current_duplicate_run_writes_hypotheses_and_findings(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1053,7 +1053,7 @@ def test_pr7_current_duplicate_run_writes_hypotheses_and_findings(
     assert findings["supported_signals"] or findings["unclear_items"]
 
 
-def test_pr7_baseline_null_run_maps_baseline_signal_to_findings(tmp_path: Path) -> None:
+def test_baseline_null_run_maps_baseline_signal_to_findings(tmp_path: Path) -> None:
     pytest.importorskip("pandas")
     output_dir = tmp_path / "baseline_findings_run"
 
@@ -1107,7 +1107,7 @@ def test_pr7_baseline_null_run_maps_baseline_signal_to_findings(tmp_path: Path) 
     assert "proved" not in serialized
 
 
-def test_pr7_no_input_run_does_not_write_hypothesis_or_findings(tmp_path: Path) -> None:
+def test_no_input_run_does_not_write_hypothesis_or_findings(tmp_path: Path) -> None:
     output_dir = tmp_path / "plan_run"
 
     result = run_cli(
@@ -1130,7 +1130,7 @@ def test_pr7_no_input_run_does_not_write_hypothesis_or_findings(tmp_path: Path) 
     assert "investigation_findings" not in trace["artifacts"]
 
 
-def test_pr7_missing_issue_with_input_does_not_write_hypothesis_or_findings(
+def test_missing_issue_with_input_does_not_write_hypothesis_or_findings(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1158,7 +1158,7 @@ def test_pr7_missing_issue_with_input_does_not_write_hypothesis_or_findings(
     assert "findings" not in trace
 
 
-def test_pr7_schema_baseline_findings_include_schema_checks_and_safe_values(
+def test_schema_baseline_findings_include_schema_checks_and_safe_values(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1193,11 +1193,11 @@ def test_pr7_schema_baseline_findings_include_schema_checks_and_safe_values(
         (output_dir / "investigation_findings.json").read_text(encoding="utf-8")
     )
     assert "Confirm expected required columns" in json.dumps(findings)
-    _assert_pr7_artifact_safety(tracker)
-    _assert_pr7_artifact_safety(findings)
+    _assert_review_artifact_safety(tracker)
+    _assert_review_artifact_safety(findings)
 
 
-def test_pr7_date_route_mentions_daily_cadence_without_missing_date_lists(
+def test_date_route_mentions_daily_cadence_without_missing_date_lists(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1225,7 +1225,7 @@ def test_pr7_date_route_mentions_daily_cadence_without_missing_date_lists(
     assert "missing_dates" not in json.dumps(findings)
 
 
-def test_pr7_trace_contains_concise_hypothesis_and_finding_metadata(
+def test_trace_contains_concise_hypothesis_and_finding_metadata(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1259,7 +1259,7 @@ def test_pr7_trace_contains_concise_hypothesis_and_finding_metadata(
     assert "evidence_items" not in trace
 
 
-def test_pr7_findings_structure_is_id_reference_only_and_deduplicated(
+def test_findings_structure_is_id_reference_only_and_deduplicated(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1303,9 +1303,9 @@ def test_pr7_findings_structure_is_id_reference_only_and_deduplicated(
         assert "metrics" not in signal
 
 
-def test_pr7_hypothesis_and_findings_safety_boundaries(tmp_path: Path) -> None:
+def test_hypothesis_and_findings_safety_boundaries(tmp_path: Path) -> None:
     pytest.importorskip("pandas")
-    output_dir = tmp_path / "pr7_safety"
+    output_dir = tmp_path / "review_artifact_safety"
 
     result = run_cli(
         "--input",
@@ -1319,10 +1319,10 @@ def test_pr7_hypothesis_and_findings_safety_boundaries(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     for name in ["hypothesis_tracker.json", "investigation_findings.json"]:
         payload = json.loads((output_dir / name).read_text(encoding="utf-8"))
-        _assert_pr7_artifact_safety(payload)
+        _assert_review_artifact_safety(payload)
 
 
-def _assert_pr7_artifact_safety(payload: dict[str, Any]) -> None:
+def _assert_review_artifact_safety(payload: dict[str, Any]) -> None:
     forbidden_keys = {*FORBIDDEN_KEYS, "generated_code"}
     assert _find_forbidden_keys_with_set(payload, forbidden_keys) == []
     serialized = json.dumps(payload).casefold()
@@ -1353,7 +1353,7 @@ def _find_forbidden_keys_with_set(value: Any, forbidden_keys: set[str]) -> list[
     return found
 
 
-def test_pr8_current_input_issue_writes_safe_markdown_report(tmp_path: Path) -> None:
+def test_current_input_issue_writes_safe_markdown_report(tmp_path: Path) -> None:
     pytest.importorskip("pandas")
     output_dir = tmp_path / "customer_report_run"
     issue = "Customer IDs have started duplicating"
@@ -1377,10 +1377,10 @@ def test_pr8_current_input_issue_writes_safe_markdown_report(tmp_path: Path) -> 
     assert "Evidence-supported signals" in report
     assert "Recommended human review checks" in report
     assert "Human review remains the final authority" in report
-    _assert_pr8_report_safety(report)
+    _assert_report_safety(report)
 
 
-def test_pr8_baseline_input_issue_report_includes_baseline_context(
+def test_baseline_input_issue_report_includes_baseline_context(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1405,10 +1405,10 @@ def test_pr8_baseline_input_issue_report_includes_baseline_context(
     assert "baseline_comparison.json" in report
     assert "higher null percentage than the baseline" in report
     assert "Baseline null comparison" in report
-    _assert_pr8_report_safety(report)
+    _assert_report_safety(report)
 
 
-def test_pr8_no_input_run_does_not_write_or_claim_report(tmp_path: Path) -> None:
+def test_no_input_run_does_not_write_or_claim_report(tmp_path: Path) -> None:
     output_dir = tmp_path / "plan_run"
 
     result = run_cli(
@@ -1433,7 +1433,7 @@ def test_pr8_no_input_run_does_not_write_or_claim_report(tmp_path: Path) -> None
     assert "investigation_report" not in case["artifacts"]
 
 
-def test_pr8_missing_issue_with_input_does_not_write_or_claim_report(
+def test_missing_issue_with_input_does_not_write_or_claim_report(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("pandas")
@@ -1461,7 +1461,7 @@ def test_pr8_missing_issue_with_input_does_not_write_or_claim_report(
     assert "investigation_report" not in trace["artifacts"]
 
 
-def test_pr8_trace_and_case_include_concise_report_metadata(tmp_path: Path) -> None:
+def test_trace_and_case_include_concise_report_metadata(tmp_path: Path) -> None:
     pytest.importorskip("pandas")
     output_dir = tmp_path / "trace_report"
 
@@ -1499,7 +1499,7 @@ def test_pr8_trace_and_case_include_concise_report_metadata(tmp_path: Path) -> N
     assert case["artifacts"]["investigation_report"] == report_path.as_posix()
 
 
-def test_pr8_artifact_references_and_report_map_include_report(tmp_path: Path) -> None:
+def test_artifact_references_and_report_map_include_report(tmp_path: Path) -> None:
     pytest.importorskip("pandas")
     output_dir = tmp_path / "artifact_refs"
 
@@ -1540,9 +1540,10 @@ def test_pr8_artifact_references_and_report_map_include_report(tmp_path: Path) -
         assert name in report
 
 
-def test_pr8_docs_exist_and_roadmap_mentions_pr8() -> None:
+def test_docs_exist_and_roadmap_mentions_current_scope() -> None:
     for path in [
         Path("docs/architecture.md"),
+        Path("docs/design_principles.md"),
         Path("docs/artifacts.md"),
         Path("docs/example_commands.md"),
         Path("docs/safety_boundaries.md"),
@@ -1550,11 +1551,11 @@ def test_pr8_docs_exist_and_roadmap_mentions_pr8() -> None:
     ]:
         assert path.exists()
     roadmap = Path("docs/roadmap.md").read_text(encoding="utf-8").casefold()
-    assert "pr #8" in roadmap
-    assert "current / implemented" in roadmap
+    assert "finished v1 scope" in roadmap
+    assert "pr #10 polished" in roadmap
 
 
-def _assert_pr8_report_safety(report: str) -> None:
+def _assert_report_safety(report: str) -> None:
     folded = report.casefold()
     for forbidden in [
         "raw_rows",

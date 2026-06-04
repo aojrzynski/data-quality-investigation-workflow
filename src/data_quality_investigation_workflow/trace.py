@@ -1,4 +1,8 @@
-"""Investigation trace artifact builders and writers."""
+"""Concise investigation trace builders.
+
+The trace records what ran, what was written, and the final stage without
+duplicating evidence payloads, hypotheses, findings, or report text.
+"""
 
 from __future__ import annotations
 

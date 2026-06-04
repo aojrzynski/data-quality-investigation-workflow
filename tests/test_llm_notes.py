@@ -384,3 +384,66 @@ def test_openai_client_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
         OpenAIResponsesNotesClient()
 
     assert "OPENAI_API_KEY is required" in str(exc_info.value)
+
+
+def test_safe_input_summary_uses_profile_shape_fallbacks() -> None:
+    summary = build_safe_input_summary(
+        source_artifacts={},
+        investigation_case={
+            "issue": {
+                "statement": "Nulls increased",
+                "issue_type": "null_increase",
+                "selected_route": "null_increase_investigation",
+            },
+            "dataset_reference": {"file_name": "current.csv"},
+            "baseline_reference": {"file_name": "baseline.csv"},
+        },
+        dataset_profile={"dataset": {"row_count": 42, "column_count": 7}},
+        baseline_profile={"dataset": {"row_count": 40, "column_count": 7}},
+        evidence_ledger={"evidence_items": []},
+        hypothesis_tracker={"hypotheses": []},
+        investigation_findings={"finding_summary": {}},
+    )
+
+    assert summary["run_context"]["current_row_count"] == 42
+    assert summary["run_context"]["current_column_count"] == 7
+    assert summary["run_context"]["baseline_row_count"] == 40
+    assert summary["run_context"]["baseline_column_count"] == 7
+
+
+def test_generic_examples_word_is_allowed_in_llm_validation() -> None:
+    notes, errors = parse_and_validate_notes(
+        json.dumps(
+            {
+                "review_summary": "Use these examples as discussion prompts only.",
+                "suggested_follow_up_questions": [],
+                "suggested_human_checks": [],
+                "communication_notes": [],
+                "limitations_to_keep_visible": [],
+            }
+        )
+    )
+
+    assert errors == []
+    assert notes["review_summary"] == "Use these examples as discussion prompts only."
+
+
+@pytest.mark.parametrize(
+    "blocked_text",
+    ["example_values", "raw_examples", "CUST-001", "avery@example.test"],
+)
+def test_specific_raw_value_markers_still_fail_llm_validation(blocked_text: str) -> None:
+    notes, errors = parse_and_validate_notes(
+        json.dumps(
+            {
+                "review_summary": f"Unsafe marker: {blocked_text}",
+                "suggested_follow_up_questions": [],
+                "suggested_human_checks": [],
+                "communication_notes": [],
+                "limitations_to_keep_visible": [],
+            }
+        )
+    )
+
+    assert notes == {}
+    assert any("blocked" in error for error in errors)

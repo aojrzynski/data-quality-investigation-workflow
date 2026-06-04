@@ -1,4 +1,9 @@
-"""Optional bounded LLM investigation notes artifacts."""
+"""Optional bounded LLM investigation notes.
+
+This module is downstream of deterministic artifacts. It builds a safe
+aggregate summary, validates model output, and keeps LLM notes
+non-authoritative.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,7 @@ from data_quality_investigation_workflow.errors import WorkflowUserError
 from data_quality_investigation_workflow.llm_client import OpenAIResponsesNotesClient
 from data_quality_investigation_workflow.llm_prompt import build_llm_notes_prompt
 
+# Centralized default so users can override it with DQIW_LLM_MODEL or --llm-model.
 DEFAULT_LLM_MODEL = os.environ.get("DQIW_LLM_MODEL", "gpt-5.5")
 LLM_SAFE_INPUT_SUMMARY_FILENAME = "llm_safe_input_summary.json"
 LLM_NOTES_JSON_FILENAME = "llm_investigation_notes.json"
@@ -35,7 +41,8 @@ FORBIDDEN_TERMS = [
     "first_rows",
     "last_rows",
     "example_values",
-    "examples",
+    "value_examples",
+    "raw_examples",
     "top_values",
     "distinct_values",
     "value_preview",
@@ -174,9 +181,12 @@ def build_safe_input_summary(
     baseline_profile: dict[str, Any] | None = None,
     baseline_comparison: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build the aggregate-only summary used by optional LLM notes."""
     issue = investigation_case.get("issue", {})
     dataset_ref = investigation_case.get("dataset_reference", {})
     baseline_ref = investigation_case.get("baseline_reference", {})
+    current_dataset_shape = dataset_profile.get("dataset", {})
+    baseline_dataset_shape = (baseline_profile or {}).get("dataset", {})
     summary = {
         "artifact_type": "llm_safe_input_summary",
         "summary_version": SUMMARY_VERSION,
@@ -189,12 +199,16 @@ def build_safe_input_summary(
         },
         "run_context": {
             "current_file_name": dataset_ref.get("file_name"),
-            "current_row_count": dataset_ref.get("row_count") or dataset_profile.get("row_count"),
-            "current_column_count": dataset_ref.get("column_count") or dataset_profile.get("column_count"),
+            "current_row_count": dataset_ref.get("row_count")
+            or current_dataset_shape.get("row_count"),
+            "current_column_count": dataset_ref.get("column_count")
+            or current_dataset_shape.get("column_count"),
             "baseline_available": baseline_profile is not None or baseline_comparison is not None,
             "baseline_file_name": baseline_ref.get("file_name"),
-            "baseline_row_count": baseline_ref.get("row_count") or (baseline_profile or {}).get("row_count"),
-            "baseline_column_count": baseline_ref.get("column_count") or (baseline_profile or {}).get("column_count"),
+            "baseline_row_count": baseline_ref.get("row_count")
+            or baseline_dataset_shape.get("row_count"),
+            "baseline_column_count": baseline_ref.get("column_count")
+            or baseline_dataset_shape.get("column_count"),
         },
         "evidence_summary": _evidence_summary(evidence_ledger),
         "hypothesis_summary": _hypothesis_summary(hypothesis_tracker),
@@ -207,6 +221,7 @@ def build_safe_input_summary(
 
 
 def parse_and_validate_notes(raw_notes: str) -> tuple[dict[str, Any], list[str]]:
+    """Parse optional LLM notes and reject unsafe or authoritative language."""
     try:
         parsed = json.loads(raw_notes)
     except json.JSONDecodeError:

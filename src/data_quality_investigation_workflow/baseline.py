@@ -1,4 +1,8 @@
-"""Safe aggregate baseline comparison builders and writers."""
+"""Safe aggregate current-vs-baseline comparison builders.
+
+Baseline comparison is aggregate-only by design. It records review signals
+without writing raw rows, example values, category labels, or missing date lists.
+"""
 
 from __future__ import annotations
 

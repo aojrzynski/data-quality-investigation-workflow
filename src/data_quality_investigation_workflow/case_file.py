@@ -1,4 +1,8 @@
-"""Investigation case artifact builders and writers."""
+"""Investigation case artifact builders.
+
+The case file anchors a run: reported issue, local inputs, artifact paths,
+workflow status, and authority boundaries for human review.
+"""
 
 from __future__ import annotations
 
