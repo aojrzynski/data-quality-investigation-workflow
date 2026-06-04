@@ -39,17 +39,28 @@ def build_investigation_trace(
     evidence_metadata: dict[str, Any] | None = None,
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
+    report_path: Path | None = None,
     hypothesis_metadata: dict[str, Any] | None = None,
     findings_metadata: dict[str, Any] | None = None,
+    report_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an investigation trace payload with concise route and evidence metadata."""
     classification = classify_issue(issue_statement)
     input_provided = loaded_dataset is not None
     issue_missing = classification["issue_type"] == "missing_issue_statement"
-    if hypothesis_metadata is not None and findings_metadata is not None and not issue_missing:
+    if report_metadata is not None and report_path is not None and not issue_missing:
+        status = "report_written"
+        stage = "markdown_report_created"
+    elif (
+        hypothesis_metadata is not None
+        and findings_metadata is not None
+        and not issue_missing
+    ):
         status = "findings_summarized"
         stage = "hypotheses_and_findings_created"
-    elif evidence_metadata is not None and ledger_path is not None and not issue_missing:
+    elif (
+        evidence_metadata is not None and ledger_path is not None and not issue_missing
+    ):
         status = "evidence_recorded"
         stage = "deterministic_checks_recorded"
     elif issue_missing:
@@ -87,6 +98,7 @@ def build_investigation_trace(
             baseline_comparison_path=baseline_comparison_path,
             hypothesis_tracker_path=hypothesis_tracker_path,
             findings_path=findings_path,
+            report_path=report_path,
         ),
         "authority_boundary": AUTHORITY_BOUNDARY,
     }
@@ -110,7 +122,9 @@ def build_investigation_trace(
                 baseline_profile_path.as_posix() if baseline_profile_path else None
             ),
             "baseline_comparison_artifact": (
-                baseline_comparison_path.as_posix() if baseline_comparison_path else None
+                baseline_comparison_path.as_posix()
+                if baseline_comparison_path
+                else None
             ),
         }
     else:
@@ -131,9 +145,13 @@ def build_investigation_trace(
         }
     if evidence_metadata is not None:
         payload["evidence"] = {
-            "checks_executed_count": int(evidence_metadata.get("checks_executed_count", 0)),
+            "checks_executed_count": int(
+                evidence_metadata.get("checks_executed_count", 0)
+            ),
             "evidence_item_count": int(evidence_metadata.get("evidence_item_count", 0)),
-            "checks_not_run_count": int(evidence_metadata.get("checks_not_run_count", 0)),
+            "checks_not_run_count": int(
+                evidence_metadata.get("checks_not_run_count", 0)
+            ),
             "route_name": classification["selected_route"],
             "issue_type": classification["issue_type"],
             "ledger_artifact": ledger_path.as_posix() if ledger_path else None,
@@ -141,17 +159,40 @@ def build_investigation_trace(
     if hypothesis_metadata is not None:
         payload["hypotheses"] = {
             "hypothesis_count": int(hypothesis_metadata.get("hypothesis_count", 0)),
-            "supported_hypothesis_count": int(hypothesis_metadata.get("supported_hypothesis_count", 0)),
-            "unclear_hypothesis_count": int(hypothesis_metadata.get("unclear_hypothesis_count", 0)),
-            "not_supported_hypothesis_count": int(hypothesis_metadata.get("not_supported_hypothesis_count", 0)),
-            "hypothesis_tracker_artifact": hypothesis_tracker_path.as_posix() if hypothesis_tracker_path else None,
+            "supported_hypothesis_count": int(
+                hypothesis_metadata.get("supported_hypothesis_count", 0)
+            ),
+            "unclear_hypothesis_count": int(
+                hypothesis_metadata.get("unclear_hypothesis_count", 0)
+            ),
+            "not_supported_hypothesis_count": int(
+                hypothesis_metadata.get("not_supported_hypothesis_count", 0)
+            ),
+            "hypothesis_tracker_artifact": hypothesis_tracker_path.as_posix()
+            if hypothesis_tracker_path
+            else None,
         }
     if findings_metadata is not None:
         payload["findings"] = {
-            "supported_signal_count": int(findings_metadata.get("supported_signal_count", 0)),
+            "supported_signal_count": int(
+                findings_metadata.get("supported_signal_count", 0)
+            ),
             "unclear_item_count": int(findings_metadata.get("unclear_item_count", 0)),
             "finding_status": findings_metadata.get("finding_status"),
-            "investigation_findings_artifact": findings_path.as_posix() if findings_path else None,
+            "investigation_findings_artifact": findings_path.as_posix()
+            if findings_path
+            else None,
+        }
+    if report_metadata is not None:
+        payload["report"] = {
+            "report_artifact": report_metadata.get("report_artifact"),
+            "report_written": bool(report_metadata.get("report_written", False)),
+            "report_section_count": int(report_metadata.get("report_section_count", 0)),
+            "finding_status": report_metadata.get("finding_status"),
+            "hypothesis_count": int(report_metadata.get("hypothesis_count", 0)),
+            "supported_signal_count": int(
+                report_metadata.get("supported_signal_count", 0)
+            ),
         }
     return payload
 
@@ -192,8 +233,10 @@ def write_investigation_trace(
     evidence_metadata: dict[str, Any] | None = None,
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
+    report_path: Path | None = None,
     hypothesis_metadata: dict[str, Any] | None = None,
     findings_metadata: dict[str, Any] | None = None,
+    report_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Create the output directory and write the investigation trace JSON artifact."""
     output_path = Path(output_dir)
@@ -215,8 +258,10 @@ def write_investigation_trace(
         baseline_comparison_metadata=baseline_comparison_metadata,
         hypothesis_tracker_path=hypothesis_tracker_path,
         findings_path=findings_path,
+        report_path=report_path,
         hypothesis_metadata=hypothesis_metadata,
         findings_metadata=findings_metadata,
+        report_metadata=report_metadata,
     )
     _write_json(trace_path, trace)
     return trace_path
@@ -243,7 +288,9 @@ def write_profiled_trace(
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
 
 
 def _artifacts(
@@ -257,6 +304,7 @@ def _artifacts(
     baseline_comparison_path: Path | None,
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
+    report_path: Path | None = None,
 ) -> dict[str, str | None]:
     artifacts = {
         "investigation_case": case_path.as_posix(),
@@ -273,4 +321,6 @@ def _artifacts(
         artifacts["hypothesis_tracker"] = hypothesis_tracker_path.as_posix()
     if findings_path is not None:
         artifacts["investigation_findings"] = findings_path.as_posix()
+    if report_path is not None:
+        artifacts["investigation_report"] = report_path.as_posix()
     return artifacts
