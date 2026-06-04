@@ -4,11 +4,11 @@ This roadmap describes the intended pull request sequence for building the Data 
 
 ## Planned PR sequence
 
-- **PR #1: repo scaffold and trace stub**  
-  Add the Python package scaffold, `dq-investigate` CLI entry point, scaffold trace artifact, tests, CI, README, and this roadmap.
+- **PR #1: repo scaffold and trace stub — implemented**
+  Added the Python package scaffold, `dq-investigate` CLI entry point, scaffold trace artifact, tests, CI, README, and this roadmap.
 
-- **PR #2: dataset intake and safe profiling**  
-  Add local dataset intake and safe summary profiling without sending raw rows to any external service.
+- **PR #2: dataset intake and safe profiling — current / implemented**
+  Adds local CSV/XLSX/XLSM dataset intake, optional Excel sheet selection, safe aggregate `dataset_profile.json`, and profiled-run trace metadata without writing raw rows to artifacts or sending raw rows to any external service.
 
 - **PR #3: issue intake and investigation case file**  
   Convert the issue statement and run metadata into an `investigation_case.json` artifact for later workflow steps.

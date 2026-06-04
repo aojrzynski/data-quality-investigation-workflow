@@ -47,6 +47,8 @@ def _metadata() -> str:
         lines.append(f"Classifier: {classifier}")
     for keyword in project.get("keywords", []):
         lines.append(f"Keywords: {keyword}")
+    for requirement in project.get("dependencies", []):
+        lines.append(f"Requires-Dist: {requirement}")
     for extra, requirements in project.get("optional-dependencies", {}).items():
         lines.append(f"Provides-Extra: {extra}")
         for requirement in requirements:

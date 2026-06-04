@@ -1,0 +1,13 @@
+customer_id,email,signup_date,status,region,lifetime_value
+CUST-001,avery@example.test,2026-05-20,active,North,124.50
+CUST-002,blake@example.test,2026-05-20,active,South,89.00
+CUST-003,,2026-05-21,pending,West,0.00
+CUST-004,casey@example.test,2026-05-21,active,East,275.75
+CUST-005,drew@example.test,2026-05-22,inactive,North,43.20
+CUST-006,emery@example.test,2026-05-22,active,South,510.10
+CUST-007,,2026-05-23,pending,West,15.00
+CUST-008,finley@example.test,2026-05-23,active,East,305.40
+CUST-009,gray@example.test,2026-05-24,inactive,North,66.60
+CUST-010,harper@example.test,2026-05-24,active,South,142.00
+CUST-010,indigo@example.test,2026-05-25,active,South,142.00
+CUST-011,jordan@example.test,2026-05-25,pending,West,8.25
