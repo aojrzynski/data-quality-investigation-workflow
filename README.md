@@ -30,7 +30,7 @@ The project is deterministic-evidence-first because human reviewers need reprodu
 
 ## Why not just ask an LLM?
 
-An LLM can be useful later for bounded narrative notes, but it should not be the source of evidence. This implementation does not call an LLM. It first creates local, structured, aggregate-only artifacts. Optional bounded LLM notes remain a future PR #9 topic and must operate only over safe artifacts.
+An LLM can be useful for bounded narrative notes, but it should not be the source of evidence. By default, this implementation does not call an LLM. It first creates local, structured, aggregate-only artifacts. Optional bounded LLM notes are available only through explicit `--llm-notes` opt-in and operate only over `llm_safe_input_summary.json`.
 
 ## Quick start
 
@@ -161,7 +161,7 @@ python -m ruff check .
 
 ## Limitations and non-goals
 
-The current implementation is intentionally bounded. It does not execute generated code, add database/cloud connectors, call an LLM, inspect upstream systems, write remediations, or certify datasets. It provides deterministic aggregate evidence and review-oriented summaries only.
+The current implementation is intentionally bounded. It does not execute generated code, add database/cloud connectors, call an LLM unless `--llm-notes` is explicitly supplied, inspect upstream systems, write remediations, or certify datasets. It provides deterministic aggregate evidence and review-oriented summaries by default, with optional non-authoritative LLM notes available only over safe artifacts.
 
 ## Further reading
 
@@ -171,3 +171,15 @@ The current implementation is intentionally bounded. It does not execute generat
 - [Safety boundaries](docs/safety_boundaries.md)
 - [Demo workflow](docs/demo_workflow.md)
 - [Roadmap](docs/roadmap.md)
+
+## Optional bounded LLM notes
+
+No LLM is used unless `--llm-notes` is explicitly supplied. Optional LLM notes require the `llm` extra and `OPENAI_API_KEY`:
+
+```bash
+python -m pip install -e ".[dev,llm]"
+export OPENAI_API_KEY="..."
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --llm-notes --output-dir outputs/customer_llm_notes_run
+```
+
+For Windows PowerShell, use `$env:OPENAI_API_KEY="..."`. The LLM receives only `llm_safe_input_summary.json`, which is built from safe aggregate artifacts. LLM notes are non-authoritative, do not replace deterministic JSON artifacts or `investigation_report.md`, and do not identify root cause or make approval, certification, trust, legal, compliance, privacy, or governance verdicts. See [docs/llm_notes.md](docs/llm_notes.md).

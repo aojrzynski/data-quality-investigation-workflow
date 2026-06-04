@@ -35,3 +35,7 @@ Open `outputs/baseline_report_run/investigation_report.md` on GitHub or in a Mar
 ## What the report does not decide
 
 The report does not determine root cause, approve the dataset, certify the dataset, make legal/compliance/privacy/governance verdicts, or state that the dataset is production-ready. It is a review aid built from deterministic aggregate artifacts.
+
+## Optional LLM notes in a demo
+
+For demos with an API key, run the deterministic workflow with `--llm-notes` to add separate optional notes files. The deterministic `investigation_report.md` remains the primary report; `llm_investigation_notes.md` is secondary reviewer assistance generated only from `llm_safe_input_summary.json`.

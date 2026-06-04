@@ -61,6 +61,9 @@ def build_investigation_case(
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
     report_path: Path | None = None,
+    llm_safe_input_summary_path: Path | None = None,
+    llm_notes_path: Path | None = None,
+    llm_notes_markdown_path: Path | None = None,
     case_id: str | None = None,
     created_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -107,6 +110,12 @@ def build_investigation_case(
         artifacts["investigation_findings"] = findings_path.as_posix()
     if report_path is not None:
         artifacts["investigation_report"] = report_path.as_posix()
+    if llm_safe_input_summary_path is not None:
+        artifacts["llm_safe_input_summary"] = llm_safe_input_summary_path.as_posix()
+    if llm_notes_path is not None:
+        artifacts["llm_investigation_notes"] = llm_notes_path.as_posix()
+    if llm_notes_markdown_path is not None:
+        artifacts["llm_investigation_notes_markdown"] = llm_notes_markdown_path.as_posix()
 
     input_provided = loaded_dataset is not None
     classification = classify_issue(issue_statement)
@@ -114,6 +123,9 @@ def build_investigation_case(
     if issue_missing:
         workflow_status = "plan_not_ready"
         workflow_stage = "missing_issue_statement"
+    elif llm_safe_input_summary_path is not None and llm_notes_path is not None:
+        workflow_status = "llm_notes_written"
+        workflow_stage = "optional_llm_notes_created"
     elif (
         input_provided
         and evidence_ledger_path is not None
@@ -181,6 +193,9 @@ def write_investigation_case(
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
     report_path: Path | None = None,
+    llm_safe_input_summary_path: Path | None = None,
+    llm_notes_path: Path | None = None,
+    llm_notes_markdown_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation case artifact."""
     output_path = Path(output_dir)
@@ -199,6 +214,9 @@ def write_investigation_case(
         hypothesis_tracker_path=hypothesis_tracker_path,
         findings_path=findings_path,
         report_path=report_path,
+        llm_safe_input_summary_path=llm_safe_input_summary_path,
+        llm_notes_path=llm_notes_path,
+        llm_notes_markdown_path=llm_notes_markdown_path,
     )
     case_path.write_text(
         json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8"

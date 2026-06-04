@@ -32,6 +32,10 @@ from data_quality_investigation_workflow.errors import (
 )
 from data_quality_investigation_workflow.intake import EXCEL_EXTENSIONS, load_dataset
 from data_quality_investigation_workflow.issue_classifier import classify_issue
+from data_quality_investigation_workflow.llm_notes import (
+    DEFAULT_LLM_MODEL,
+    generate_llm_notes,
+)
 from data_quality_investigation_workflow.planning import (
     PLAN_FILENAME,
     write_investigation_plan,
@@ -89,6 +93,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Known or suspected data quality issue statement to record in the case and trace.",
     )
     parser.add_argument(
+        "--llm-notes",
+        action="store_true",
+        help=(
+            "Generate optional bounded non-authoritative LLM investigation notes "
+            "from safe artifacts only."
+        ),
+    )
+    parser.add_argument(
+        "--llm-model",
+        default=DEFAULT_LLM_MODEL,
+        help=f"Model for optional LLM notes. Defaults to {DEFAULT_LLM_MODEL}.",
+    )
+    parser.add_argument(
+        "--llm-timeout",
+        type=float,
+        default=None,
+        help="Optional timeout in seconds for the LLM notes request.",
+    )
+    parser.add_argument(
+        "--llm-max-output-tokens",
+        type=int,
+        default=None,
+        help="Optional maximum output tokens for the LLM notes response.",
+    )
+    parser.add_argument(
         "--output-dir",
         default=DEFAULT_OUTPUT_DIR,
         type=Path,
@@ -103,6 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        _validate_llm_args(args)
         _validate_baseline_args(args)
         if args.input is None:
             _run_plan_only(args)
@@ -112,6 +142,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except WorkflowUserError as error:
         parser.exit(status=2, message=f"Error: {error}\n")
+
+
+def _validate_llm_args(args: argparse.Namespace) -> None:
+    if not args.llm_notes:
+        return
+    if args.input is None:
+        raise WorkflowUserError(
+            "--llm-notes requires --input and --issue so safe findings exist "
+            "before LLM notes are generated."
+        )
+    if not args.issue:
+        raise WorkflowUserError(
+            "--llm-notes requires --issue so the notes can be grounded in a "
+            "specific investigation question."
+        )
 
 
 def _validate_baseline_args(args: argparse.Namespace) -> None:
@@ -338,6 +383,73 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         report_metadata = None
         report_path = None
 
+    llm_metadata = None
+    if (
+        args.llm_notes
+        and report_path is not None
+        and hypothesis_tracker_path is not None
+        and findings_path is not None
+    ):
+        artifact_refs = _artifact_refs(
+            case_path=case_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            ledger_path=ledger_path,
+            trace_path=trace_path,
+            baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+            baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+            hypothesis_tracker_path=hypothesis_tracker_path,
+            findings_path=findings_path,
+            report_path=report_path,
+        )
+        investigation_case = json.loads(case_path.read_text(encoding="utf-8"))
+        hypothesis_tracker = json.loads(
+            hypothesis_tracker_path.read_text(encoding="utf-8")
+        )
+        findings = json.loads(findings_path.read_text(encoding="utf-8"))
+        llm_result = generate_llm_notes(
+            output_dir=output_dir,
+            model=args.llm_model,
+            artifacts=artifact_refs,
+            investigation_case=investigation_case,
+            dataset_profile=profile,
+            evidence_ledger=ledger,
+            hypothesis_tracker=hypothesis_tracker,
+            investigation_findings=findings,
+            baseline_profile=baseline_profile,
+            baseline_comparison=baseline_comparison,
+            timeout=args.llm_timeout,
+            max_output_tokens=args.llm_max_output_tokens,
+        )
+        llm_metadata = {
+            "status": llm_result["status"],
+            "model": args.llm_model,
+            "safe_input_summary_artifact": llm_result[
+                "safe_input_summary_path"
+            ].as_posix(),
+            "llm_notes_artifact": llm_result["notes_json_path"].as_posix(),
+            "llm_notes_markdown_artifact": llm_result["notes_markdown_path"].as_posix()
+            if llm_result["notes_markdown_path"] is not None
+            else None,
+        }
+        case_path = write_investigation_case(
+            output_dir=output_dir,
+            issue_statement=args.issue,
+            loaded_dataset=loaded_dataset,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            ledger_path=ledger_path,
+            baseline_dataset=baseline_dataset,
+            baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+            baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+            hypothesis_tracker_path=hypothesis_tracker_path,
+            findings_path=findings_path,
+            report_path=report_path,
+            llm_safe_input_summary_path=llm_result["safe_input_summary_path"],
+            llm_notes_path=llm_result["notes_json_path"],
+            llm_notes_markdown_path=llm_result["notes_markdown_path"],
+        )
+
     trace_path = write_investigation_trace(
         output_dir=output_dir,
         issue_statement=args.issue,
@@ -361,6 +473,7 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         hypothesis_metadata=hypothesis_metadata,
         findings_metadata=findings_metadata,
         report_metadata=report_metadata,
+        llm_metadata=llm_metadata,
     )
     print(f"Investigation case written to {case_path.as_posix()}")
     print(f"Dataset profile written to {profile_path.as_posix()}")
@@ -376,6 +489,20 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         print(f"Investigation findings written to {findings_path.as_posix()}")
     if report_path is not None:
         print(f"Investigation report written to {report_path.as_posix()}")
+    if llm_metadata is not None:
+        print(
+            "LLM safe input summary written to "
+            f"{llm_metadata['safe_input_summary_artifact']}"
+        )
+        print(
+            "LLM investigation notes written to "
+            f"{llm_metadata['llm_notes_artifact']}"
+        )
+        if llm_metadata["llm_notes_markdown_artifact"] is not None:
+            print(
+                "LLM investigation notes Markdown written to "
+                f"{llm_metadata['llm_notes_markdown_artifact']}"
+            )
     print(f"Investigation trace written to {trace_path.as_posix()}")
 
 

@@ -51,6 +51,6 @@ The JSON artifacts are the structured source of truth. The Markdown report is a 
 
 The trace remains concise. It records status, stage, route, artifact paths, dataset metadata, baseline availability, evidence counts, hypothesis counts, finding counts, and report metadata when a report is written. It does not duplicate full report content, full evidence items, full hypotheses, or full findings.
 
-## Future LLM notes
+## PR #9 optional LLM notes layer
 
-Future optional bounded LLM notes would fit after deterministic artifacts are written and before or alongside human-facing narrative notes. They are not implemented here. Any future LLM step must consume only safe aggregate artifacts, avoid raw rows and value lists, and remain subordinate to deterministic evidence and human review.
+After deterministic profiling, planning, evidence, hypotheses, findings, and `investigation_report.md` are written, an explicit `--llm-notes` opt-in can create a bounded safe input summary and optional non-authoritative LLM notes. This layer is downstream of deterministic artifacts only; it does not generate evidence, classify the issue authoritatively, identify root cause, or replace the deterministic report.
