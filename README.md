@@ -2,7 +2,7 @@
 
 Data Quality Investigation Workflow is a local-first Python project for investigating known or suspected data quality issues. The goal is to help a human reviewer move from an issue statement, such as "Customer IDs have started duplicating," to a structured investigation record with deterministic evidence, clear open questions, and reviewable artifacts.
 
-This repository is at **PR #1 scaffold status**. The current implementation only provides the Python package scaffold, the `dq-investigate` CLI entry point, an initial `investigation_trace.json` artifact, tests, and CI. It does not load datasets or investigate data yet.
+This repository is at **PR #2 dataset intake and safe profiling status**. The current implementation can run a scaffold-only trace or load a local CSV/XLSX/XLSM dataset and write a safe aggregate `dataset_profile.json` plus an updated `investigation_trace.json`. Profiling is a foundation step only; it does not investigate, confirm, or explain the reported issue.
 
 ## The problem
 
@@ -33,26 +33,47 @@ The intended workflow will eventually:
 
 What exists now:
 
-- package scaffold under `src/data_quality_investigation_workflow`;
+- package code under `src/data_quality_investigation_workflow`;
 - `dq-investigate` CLI entry point;
-- `--issue`, `--output-dir`, and `--version` CLI options;
-- output directory creation;
-- scaffold-only `investigation_trace.json` artifact;
-- pytest tests;
-- GitHub Actions CI.
+- `--input`, `--sheet`, `--issue`, `--output-dir`, and `--version` CLI options;
+- scaffold-only runs when `--input` is omitted;
+- local CSV/XLSX/XLSM dataset intake;
+- optional Excel sheet selection with `--sheet`;
+- safe aggregate `dataset_profile.json` generation;
+- updated `investigation_trace.json` generation;
+- a small synthetic customer example dataset;
+- pytest tests and GitHub Actions CI.
 
 What does not exist yet:
 
-- dataset loading;
 - issue classification;
+- investigation case file creation;
 - investigation planning;
-- deterministic data checks;
+- route selection;
+- issue-specific deterministic data checks;
 - evidence ledger logic;
 - hypothesis tracking;
 - baseline comparison;
 - Markdown report generation;
 - LangGraph orchestration;
 - OpenAI or other LLM integration.
+
+## Safe aggregate profiling
+
+When `--input` is provided, the CLI loads the dataset and writes `dataset_profile.json`. The profile contains dataset metadata and aggregate column summaries such as row counts, column counts, null counts, unique counts, numeric min/max/mean values, datetime parse/range summaries, and text length summaries.
+
+The profile intentionally does **not** include:
+
+- raw rows;
+- sampled rows;
+- first or last rows;
+- example values;
+- top values;
+- distinct value lists;
+- raw failing records;
+- value previews.
+
+For CSV input, pandas' default null handling is used, so blank cells may be treated as null values. Text columns may include length statistics, but not the text values themselves.
 
 ## Why deterministic evidence matters
 
@@ -84,7 +105,7 @@ A suspected data quality issue usually needs multiple steps, not a single answer
 - what is confirmed, not confirmed, or still unclear;
 - what a human should check next.
 
-PR #1 only creates the starting point for this workflow. Later PRs will add the investigation steps one at a time.
+PR #2 only adds dataset intake and safe aggregate profiling. Later PRs will add the investigation steps one at a time.
 
 ## Quick start
 
@@ -94,22 +115,23 @@ Use Python 3.11 or newer.
 python -m pip install -e ".[dev]"
 ```
 
-Run the scaffold CLI:
+Run a CSV profile:
 
 ```bash
-dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/scaffold_run
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_profile
+```
+
+The command writes:
+
+```text
+outputs/customer_profile/dataset_profile.json
+outputs/customer_profile/investigation_trace.json
 ```
 
 Equivalent module command:
 
 ```bash
-python -m data_quality_investigation_workflow.cli --issue "Customer IDs have started duplicating" --output-dir outputs/scaffold_run
-```
-
-The command currently writes:
-
-```text
-outputs/scaffold_run/investigation_trace.json
+python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_profile
 ```
 
 ## Example commands
@@ -126,44 +148,52 @@ Show the package version:
 dq-investigate --version
 ```
 
-Write a scaffold trace with an issue statement:
+CSV profile:
+
+```bash
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_profile
+```
+
+Excel profile:
+
+```bash
+dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_profile
+```
+
+Scaffold-only run without dataset input:
 
 ```bash
 dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/scaffold_run
 ```
 
-Write a scaffold trace using the module entry point:
-
-```bash
-python -m data_quality_investigation_workflow.cli --issue "Nulls increased in the customer email field" --output-dir outputs/scaffold_run
-```
-
 ## Output artifacts
 
-Implemented in PR #1:
+Implemented in PR #2:
 
-- `investigation_trace.json` — records that this was a scaffold-only run, the issue statement if supplied, the implemented scope, not-yet-implemented areas, and authority boundaries.
+- `dataset_profile.json` — safe aggregate dataset metadata and column summaries. Written only when `--input` is provided.
+- `investigation_trace.json` — records whether the run was scaffold-only or dataset-profiled, the issue statement if supplied, implemented scope, remaining not-yet-implemented workflow pieces, profiled dataset metadata when relevant, artifact paths, and authority boundaries.
 
 Planned for future PRs, not implemented yet:
 
 - `investigation_case.json`;
-- `dataset_profile.json`;
 - `investigation_plan.json`;
 - `evidence_ledger.json`;
 - `hypothesis_tracker.json`;
 - `investigation_findings.json`;
-- `investigation_report.md`;
-- `investigation_trace.json` updates as the workflow grows.
+- `investigation_report.md`.
 
 ## Authority boundary
 
 This project is meant to support human review, not replace it. It must not claim to:
 
+- treat profiling as investigation;
+- confirm the reported issue from a profile alone;
+- identify root cause from a profile alone;
 - fix data;
-- prove root cause;
-- approve a dataset;
-- decide that a dataset is trusted, safe, complete, compliant, production-ready, or ready for downstream use;
+- approve, certify, or trust a dataset;
+- decide that a dataset is complete, compliant, production-ready, or ready for downstream use;
 - make legal, compliance, privacy, or governance verdicts;
+- write raw rows to artifacts;
 - send raw rows to an LLM;
 - execute arbitrary generated code;
 - treat LLM output as authoritative.
@@ -177,13 +207,20 @@ Human review remains the final authority.
 ├── .github/workflows/ci.yml
 ├── docs/
 │   └── roadmap.md
+├── examples/
+│   └── customer_quality_snapshot.csv
 ├── src/
 │   └── data_quality_investigation_workflow/
 │       ├── __init__.py
 │       ├── cli.py
+│       ├── errors.py
+│       ├── intake.py
+│       ├── profiling.py
 │       └── trace.py
 ├── tests/
-│   └── test_cli.py
+│   ├── test_cli.py
+│   ├── test_intake.py
+│   └── test_profiling.py
 ├── LICENSE
 ├── README.md
 └── pyproject.toml
@@ -194,33 +231,36 @@ Human review remains the final authority.
 ```bash
 python -m compileall src tests
 python -m pytest -q
+python -m ruff check .
 ```
 
-The CI workflow runs the same checks on pull requests and pushes to `main`.
+The CI workflow runs compile and pytest checks on pull requests and pushes to `main`.
 
 ## Limitations and non-goals
 
-For PR #1, this repository intentionally does not include:
+For PR #2, this repository intentionally does not include:
 
-- dataset intake or parsing;
-- pandas or openpyxl dependencies;
-- example datasets;
-- generated output files committed to the repository;
 - issue classification;
-- investigation plans;
-- deterministic checks;
-- evidence ledger implementation;
-- hypothesis tracking;
-- baseline comparison;
-- Markdown report generation;
+- `investigation_case.json`;
+- `investigation_plan.json`;
+- `evidence_ledger.json`;
+- `hypothesis_tracker.json`;
+- `investigation_findings.json`;
+- `investigation_report.md`;
+- baseline/current comparison;
 - LangGraph orchestration;
-- OpenAI or other LLM code.
+- OpenAI or other LLM code;
+- arbitrary generated code execution;
+- database or cloud connectors;
+- committed generated outputs.
 
-The scaffold trace is useful only as a wiring check. It is not an investigation result.
+The dataset profile is useful as an aggregate intake artifact. It is not an investigation result and does not confirm whether the reported issue exists.
 
 ## Further reading
 
 - [Roadmap](docs/roadmap.md)
 - [Python packaging user guide](https://packaging.python.org/)
+- [pandas documentation](https://pandas.pydata.org/docs/)
+- [openpyxl documentation](https://openpyxl.readthedocs.io/)
 - [pytest documentation](https://docs.pytest.org/)
 - [Ruff documentation](https://docs.astral.sh/ruff/)
