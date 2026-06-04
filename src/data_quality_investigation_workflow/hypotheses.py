@@ -1,7 +1,10 @@
 """Cautious hypothesis tracker builders.
 
-Hypotheses connect route-specific questions to evidence IDs so reviewers can
-trace interpretation back to deterministic aggregate checks.
+Hypotheses sit between evidence items and human-readable findings. They give
+each possible explanation or review angle a cautious status: supported by
+evidence, not supported by evidence, unclear, or not assessed. Hypotheses keep
+links back to evidence IDs so reviewers can challenge the interpretation without
+losing the deterministic source signal.
 """
 
 from __future__ import annotations
@@ -42,7 +45,9 @@ _COMMON_LIMITATIONS = [
     "Human review is required before treating this as an operational finding.",
 ]
 
-_DAILY_CADENCE_LIMITATION = "Daily cadence is an assumption and should be checked by a human reviewer."
+_DAILY_CADENCE_LIMITATION = (
+    "Daily cadence is an assumption and should be checked by a human reviewer."
+)
 
 
 def build_hypothesis_tracker(
@@ -55,7 +60,11 @@ def build_hypothesis_tracker(
     baseline_comparison_available: bool = False,
 ) -> dict[str, Any]:
     """Build a bounded hypothesis tracker from aggregate evidence IDs."""
-    evidence_items = list(evidence_ledger.get("evidence_items", [])) if evidence_ledger else []
+    evidence_items = (
+        list(evidence_ledger.get("evidence_items", [])) if evidence_ledger else []
+    )
+    # Build a small lookup by check ID so route-specific hypothesis builders can
+    # reference evidence IDs without copying full evidence payloads.
     evidence_by_check = {str(item.get("check_id")): item for item in evidence_items}
     issue_type = str(classification["issue_type"])
     route_name = str(classification["selected_route"])
@@ -115,7 +124,9 @@ def write_hypothesis_tracker(
         artifacts=artifacts,
         baseline_comparison_available=baseline_comparison_available,
     )
-    tracker_path.write_text(json.dumps(tracker, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    tracker_path.write_text(
+        json.dumps(tracker, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
     return tracker_path
 
 
@@ -142,7 +153,10 @@ def _route_hypotheses(
         evidence_by_check=evidence_by_check,
         baseline_available=baseline_available,
     )
-    return [{"hypothesis_id": f"hyp-{index:03d}", **hyp} for index, hyp in enumerate(hypotheses, 1)]
+    return [
+        {"hypothesis_id": f"hyp-{index:03d}", **hyp}
+        for index, hyp in enumerate(hypotheses, 1)
+    ]
 
 
 def _duplicate_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
@@ -169,7 +183,9 @@ def _duplicate_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             missing_rationale="No baseline duplicate comparison evidence was available for this run.",
-            checks=["Review source, extract, or join changes if duplicate counts increased against baseline."],
+            checks=[
+                "Review source, extract, or join changes if duplicate counts increased against baseline."
+            ],
         ),
         _from_signal(
             statement="Candidate key nulls may also contribute to identifier quality concerns.",
@@ -180,7 +196,9 @@ def _duplicate_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             rationale_absent="The key-null evidence item did not detect nulls in assessed candidate key columns.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
-            checks=["Review whether nullable key fields are expected for this dataset."],
+            checks=[
+                "Review whether nullable key fields are expected for this dataset."
+            ],
         ),
     ]
 
@@ -197,7 +215,9 @@ def _null_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             rationale_absent="The current-null evidence item did not detect nulls in assessed columns.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
-            checks=["Confirm the specific column or columns meant by the issue statement."],
+            checks=[
+                "Confirm the specific column or columns meant by the issue statement."
+            ],
         ),
         _baseline_signal_hypothesis(
             statement="The current dataset has a higher null percentage than the baseline in one or more assessed columns.",
@@ -206,14 +226,18 @@ def _null_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             missing_rationale="No baseline null comparison evidence was available, so an increase cannot be assessed from current-only evidence.",
-            checks=["Check whether upstream validation, extraction, or optionality rules changed."],
+            checks=[
+                "Check whether upstream validation, extraction, or optionality rules changed."
+            ],
         ),
         _context_hypothesis(
             statement="The issue may be column-specific and should be reviewed against the intended business column.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             rationale="Aggregate null evidence does not decide whether the assessed columns match the reviewer intent.",
-            checks=["Decide whether the observed null difference is operationally meaningful."],
+            checks=[
+                "Decide whether the observed null difference is operationally meaningful."
+            ],
         ),
     ]
 
@@ -231,7 +255,9 @@ def _date_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             rationale_absent="The date-gap evidence item did not detect missing daily periods in assessed candidate date columns.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
-            checks=["Confirm the expected date cadence, especially whether daily cadence is valid."],
+            checks=[
+                "Confirm the expected date cadence, especially whether daily cadence is valid."
+            ],
             limitations=limitation,
         ),
         _baseline_signal_hypothesis(
@@ -249,7 +275,9 @@ def _date_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             rationale="Date-gap evidence is based on daily-cadence aggregate checks and does not decide the correct business calendar.",
-            checks=["Review whether missing periods are expected non-business days or true gaps."],
+            checks=[
+                "Review whether missing periods are expected non-business days or true gaps."
+            ],
             limitations=limitation,
         ),
     ]
@@ -266,7 +294,9 @@ def _total_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             supporting=current_ids,
-            rationale="Current numeric-total or row-count aggregate evidence items were recorded." if current_ids else "No current total evidence item was available.",
+            rationale="Current numeric-total or row-count aggregate evidence items were recorded."
+            if current_ids
+            else "No current total evidence item was available.",
             checks=["Confirm the correct business metric for the reported total."],
         ),
         _baseline_signal_hypothesis(
@@ -276,14 +306,18 @@ def _total_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             missing_rationale="No baseline total comparison evidence was available for this run.",
-            checks=["Check whether row-count or numeric-total differences are expected."],
+            checks=[
+                "Check whether row-count or numeric-total differences are expected."
+            ],
         ),
         _context_hypothesis(
             statement="The apparent total change may depend on the correct business measure.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             rationale="Aggregate totals do not decide which measure is the intended business metric.",
-            checks=["Review filters, source scope, and aggregation logic between baseline and current datasets."],
+            checks=[
+                "Review filters, source scope, and aggregation logic between baseline and current datasets."
+            ],
         ),
     ]
 
@@ -309,7 +343,9 @@ def _schema_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             missing_rationale="No baseline schema comparison evidence was available for this run.",
-            checks=["Check whether added or removed columns are expected schema evolution."],
+            checks=[
+                "Check whether added or removed columns are expected schema evolution."
+            ],
         ),
         _context_hypothesis(
             statement="The schema difference may need validation against expected contracts or required columns.",
@@ -333,7 +369,9 @@ def _category_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             rationale_absent="Categorical-shape evidence did not identify clear candidate categorical columns.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
-            checks=["Confirm which categorical column is relevant to the issue statement."],
+            checks=[
+                "Confirm which categorical column is relevant to the issue statement."
+            ],
         ),
         _baseline_signal_hypothesis(
             statement="Current category shape differs from baseline by unique-count or high-cardinality aggregate signals.",
@@ -342,14 +380,18 @@ def _category_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             missing_rationale="No baseline category-shape comparison evidence was available for this run.",
-            checks=["Inspect source system changes or mapping rules if category shape changed."],
+            checks=[
+                "Inspect source system changes or mapping rules if category shape changed."
+            ],
         ),
         _context_hypothesis(
             statement="The category shift cannot be interpreted without business context because category labels are not written.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             rationale="The artifact intentionally omits category labels and full distributions.",
-            checks=["Review whether unique-count changes are meaningful without seeing category labels in this artifact."],
+            checks=[
+                "Review whether unique-count changes are meaningful without seeing category labels in this artifact."
+            ],
         ),
     ]
 
@@ -366,7 +408,9 @@ def _general_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             rationale_absent="No general profile evidence item was available.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
-            checks=["Review profile summaries to decide which route should be investigated next."],
+            checks=[
+                "Review profile summaries to decide which route should be investigated next."
+            ],
         ),
         _baseline_signal_hypothesis(
             statement="Current and baseline datasets differ in general aggregate profile metrics.",
@@ -375,14 +419,18 @@ def _general_hypotheses(**kwargs: Any) -> list[dict[str, Any]]:
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             missing_rationale="No baseline general comparison evidence was available for this run.",
-            checks=["Review baseline comparison summaries to decide which route should be investigated next."],
+            checks=[
+                "Review baseline comparison summaries to decide which route should be investigated next."
+            ],
         ),
         _context_hypothesis(
             statement="The issue statement is too broad for route-specific interpretation.",
             route_name=kwargs["route_name"],
             issue_type=kwargs["issue_type"],
             rationale="A broad issue statement limits deterministic route-specific interpretation.",
-            checks=["Add a more specific issue statement for a more useful follow-up run."],
+            checks=[
+                "Add a more specific issue statement for a more useful follow-up run."
+            ],
         ),
     ]
 
@@ -400,6 +448,8 @@ def _from_signal(
     checks: list[str],
     limitations: list[str] | None = None,
 ) -> dict[str, Any]:
+    # Missing evidence becomes not_assessed rather than a failure. That distinction
+    # tells reviewers the workflow lacked input instead of disproving the concern.
     if evidence is None:
         return _manual_hypothesis(
             statement=statement,
@@ -414,6 +464,9 @@ def _from_signal(
         )
     signal = str(evidence.get("signal", "unclear"))
     evidence_id = str(evidence.get("evidence_id"))
+    # Present, absent, and unclear signals are mapped cautiously according to the
+    # route. A present signal can support review, but it is not a final verdict.
+
     if signal == "present":
         return _manual_hypothesis(
             statement=statement,
@@ -464,6 +517,8 @@ def _baseline_signal_hypothesis(
     limitations: list[str] | None = None,
 ) -> dict[str, Any]:
     if evidence is None:
+        # A missing baseline usually leaves the comparison question unclear; a
+        # supplied baseline with no matching signal is tracked as not assessed.
         return _manual_hypothesis(
             statement=statement,
             status=UNCLEAR if not baseline_available else NOT_ASSESSED,
@@ -539,7 +594,11 @@ def _manual_hypothesis(
 
 
 def _ids(items: list[dict[str, Any] | None]) -> list[str]:
-    return [str(item.get("evidence_id")) for item in items if item is not None and item.get("evidence_id")]
+    return [
+        str(item.get("evidence_id"))
+        for item in items
+        if item is not None and item.get("evidence_id")
+    ]
 
 
 def _signal_level(evidence: dict[str, Any]) -> str:

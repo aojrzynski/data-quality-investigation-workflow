@@ -1,7 +1,10 @@
 """Evidence ledger builders.
 
-The ledger records deterministic aggregate evidence and checks not run. Later
-artifacts reference evidence IDs instead of copying raw payloads.
+The evidence ledger is the structured record of what deterministic checks ran,
+what aggregate signals they produced, and what planned checks could not run.
+Later artifacts reference evidence IDs instead of copying each evidence payload,
+which keeps the investigation chain inspectable without duplicating full check
+results in every file.
 """
 
 from __future__ import annotations
@@ -63,6 +66,8 @@ def build_evidence_ledger(
 ) -> dict[str, Any]:
     """Build an aggregate-only evidence ledger payload."""
     issue_provided = bool(classification.get("provided"))
+    # If no issue was supplied, the ledger still explains that checks were not
+    # executed. This is clearer than silently omitting the evidence stage.
     status = "checks_executed" if issue_provided else "not_executed"
     execution: dict[str, Any] = {
         "status": status,
@@ -142,6 +147,8 @@ def write_evidence_ledger(
     output_path.mkdir(parents=True, exist_ok=True)
     ledger_path = output_path / LEDGER_FILENAME
 
+    # Route checks return both evidence items and planned checks that could not
+    # run, so the ledger captures positive work and gaps in one place.
     result = run_route_checks(
         loaded_dataset,
         dataset_profile,
@@ -170,7 +177,9 @@ def write_evidence_ledger(
         hypothesis_tracker_path=hypothesis_tracker_path,
         findings_path=findings_path,
     )
-    ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    ledger_path.write_text(
+        json.dumps(ledger, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
     return ledger_path
 
 

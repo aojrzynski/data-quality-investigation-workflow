@@ -13,8 +13,13 @@ def test_readme_uses_stable_v1_language() -> None:
 
     assert "pr #8 status" not in folded
     assert "pr #9 status" not in folded
+    assert "pr #10 status" not in folded
     assert "repository is at pr" not in folded
+    assert "pr #" not in folded[:1500]
     assert "What to open first" in readme
+    assert "Why there are several artifacts" in readme
+    assert "The output is review material, not a verdict" in readme
+    assert "Optional LLM notes are disabled by default" in readme
     assert "Human review remains" in readme
     assert "No LLM is used unless" in readme
     assert "investigation_report.md" in readme

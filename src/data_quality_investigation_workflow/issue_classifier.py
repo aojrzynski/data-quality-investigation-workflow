@@ -1,7 +1,9 @@
 """Deterministic issue classification helpers.
 
-Classification chooses a planning route from plain keyword rules. It is a
-planning aid only, not evidence that the reported issue exists.
+Classification is route selection only. It uses keyword rules to decide which
+kind of investigation plan should be written first, and the precedence order is
+fixed so the same issue statement always chooses the same route. A selected
+route is not evidence that the issue exists; it only decides what to check.
 """
 
 from __future__ import annotations
@@ -126,11 +128,15 @@ def classify_issue(issue_statement: str | None) -> dict[str, Any]:
         }
 
     normalized = issue_statement.casefold()
+    # Collect matches for every route first, then apply the fixed precedence
+    # below. This makes overlapping words deterministic instead of orderless.
     matched_by_type = {
         issue_type: [term for term in ISSUE_PATTERNS[issue_type] if term in normalized]
         for issue_type in ISSUE_PATTERNS
     }
     for issue_type in CLASSIFICATION_PRECEDENCE:
+        # The first matching route chooses what to check. It does not confirm the
+        # reported issue; evidence is gathered in later stages.
         if issue_type == "general_suspected_issue" or matched_by_type.get(issue_type):
             return {
                 "statement": issue_statement,

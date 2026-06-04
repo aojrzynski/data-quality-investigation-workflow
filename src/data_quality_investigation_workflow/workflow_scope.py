@@ -1,4 +1,10 @@
-"""Shared workflow scope and authority boundary text."""
+"""Shared workflow scope and authority boundary text.
+
+Several artifacts need to repeat the same scope and authority boundaries. The
+phrasing is centralized here so the case file, trace, and downstream summaries
+do not drift about what the workflow does, what it does not do, and why human
+review remains the final authority.
+"""
 
 from __future__ import annotations
 

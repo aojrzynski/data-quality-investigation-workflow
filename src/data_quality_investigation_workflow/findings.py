@@ -1,7 +1,10 @@
 """Review-oriented finding summary builders.
 
-Findings summarize evidence-supported signals and human checks. They are
-interpretation aids, not final decisions.
+Findings are review summaries, not final determinations. This stage translates
+cautious hypothesis statuses into supported signals, not-supported signals, and
+unclear items so a human can quickly see what to inspect next. The wording stays
+careful because aggregate evidence can guide review but cannot approve a
+dataset, identify root cause, or close the investigation by itself.
 """
 
 from __future__ import annotations
@@ -107,14 +110,25 @@ def build_investigation_findings(
     baseline_comparison_available: bool,
 ) -> dict[str, Any]:
     """Build a cautious finding summary from hypotheses and evidence IDs."""
-    hypotheses = list(hypothesis_tracker.get("hypotheses", [])) if hypothesis_tracker else []
+    hypotheses = (
+        list(hypothesis_tracker.get("hypotheses", [])) if hypothesis_tracker else []
+    )
     issue_type = str(classification["issue_type"])
+    # Map cautious hypothesis statuses into reader-facing buckets. These buckets
+    # are review aids; even supported signals still require human judgment.
     supported_signals = _supported_signals(hypotheses)
     not_supported_signals = _not_supported_signals(hypotheses)
     unclear_items = _unclear_items(hypotheses)
     unclear_items.extend(_generic_unclear_items(start=len(unclear_items) + 1))
+    # Human checks come from both the route and individual hypotheses. Deduping
+    # keeps the final list practical without hiding where evidence IDs point.
     checks = _dedupe(
-        [*ROUTE_HUMAN_CHECKS.get(issue_type, ROUTE_HUMAN_CHECKS["general_suspected_issue"]), *list(_hypothesis_checks(hypotheses))]
+        [
+            *ROUTE_HUMAN_CHECKS.get(
+                issue_type, ROUTE_HUMAN_CHECKS["general_suspected_issue"]
+            ),
+            *list(_hypothesis_checks(hypotheses)),
+        ]
     )
     return {
         "artifact_type": "investigation_findings",
@@ -125,7 +139,9 @@ def build_investigation_findings(
             "issue_type": issue_type,
             "selected_route": classification["selected_route"],
         },
-        "finding_status": FINDING_STATUS_REVIEW_REQUIRED if evidence_ledger else "no_evidence_available",
+        "finding_status": FINDING_STATUS_REVIEW_REQUIRED
+        if evidence_ledger
+        else "no_evidence_available",
         "input_state": {
             "evidence_ledger_available": evidence_ledger is not None,
             "baseline_comparison_available": baseline_comparison_available,
@@ -134,8 +150,12 @@ def build_investigation_findings(
         "summary": {
             "supported_signal_count": len(supported_signals),
             "not_supported_signal_count": len(not_supported_signals),
-            "unclear_signal_count": sum(1 for item in hypotheses if item.get("status") == UNCLEAR),
-            "not_assessed_count": sum(1 for item in hypotheses if item.get("status") == NOT_ASSESSED),
+            "unclear_signal_count": sum(
+                1 for item in hypotheses if item.get("status") == UNCLEAR
+            ),
+            "not_assessed_count": sum(
+                1 for item in hypotheses if item.get("status") == NOT_ASSESSED
+            ),
         },
         "supported_signals": supported_signals,
         "not_supported_signals": not_supported_signals,
@@ -170,7 +190,9 @@ def write_investigation_findings(
         artifacts=artifacts,
         baseline_comparison_available=baseline_comparison_available,
     )
-    findings_path.write_text(json.dumps(findings, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    findings_path.write_text(
+        json.dumps(findings, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
     return findings_path
 
 
@@ -185,7 +207,9 @@ def _supported_signals(hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "statement": f"Evidence-supported signal: {hypothesis['statement']}",
                 "basis": f"Mapped from supported hypothesis {hypothesis['hypothesis_id']}.",
                 "related_hypotheses": [hypothesis["hypothesis_id"]],
-                "related_evidence_ids": list(hypothesis.get("supporting_evidence_ids", [])),
+                "related_evidence_ids": list(
+                    hypothesis.get("supporting_evidence_ids", [])
+                ),
                 "human_review_required": True,
             }
         )
@@ -203,7 +227,9 @@ def _not_supported_signals(hypotheses: list[dict[str, Any]]) -> list[dict[str, A
                 "statement": f"Not supported by current evidence: {hypothesis['statement']}",
                 "basis": f"Mapped from not-supported hypothesis {hypothesis['hypothesis_id']}.",
                 "related_hypotheses": [hypothesis["hypothesis_id"]],
-                "related_evidence_ids": list(hypothesis.get("contradicting_evidence_ids", [])),
+                "related_evidence_ids": list(
+                    hypothesis.get("contradicting_evidence_ids", [])
+                ),
                 "human_review_required": True,
             }
         )
@@ -213,17 +239,26 @@ def _not_supported_signals(hypotheses: list[dict[str, Any]]) -> list[dict[str, A
 def _unclear_items(hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
     items = []
     for index, hypothesis in enumerate(
-        [item for item in hypotheses if item.get("status") in {UNCLEAR, NOT_ASSESSED}], start=1
+        [item for item in hypotheses if item.get("status") in {UNCLEAR, NOT_ASSESSED}],
+        start=1,
     ):
         checks = list(hypothesis.get("recommended_human_checks", []))
         items.append(
             {
                 "item_id": f"unc-{index:03d}",
                 "statement": f"Unclear: {hypothesis['statement']}",
-                "reason": str(hypothesis.get("rationale", "Aggregate evidence does not resolve this item.")),
+                "reason": str(
+                    hypothesis.get(
+                        "rationale", "Aggregate evidence does not resolve this item."
+                    )
+                ),
                 "related_hypotheses": [hypothesis["hypothesis_id"]],
-                "related_evidence_ids": list(hypothesis.get("inconclusive_evidence_ids", [])),
-                "recommended_human_check": checks[0] if checks else "Review the related aggregate evidence with business context.",
+                "related_evidence_ids": list(
+                    hypothesis.get("inconclusive_evidence_ids", [])
+                ),
+                "recommended_human_check": checks[0]
+                if checks
+                else "Review the related aggregate evidence with business context.",
             }
         )
     return items
@@ -237,7 +272,9 @@ def _generic_unclear_items(*, start: int) -> list[dict[str, Any]]:
             "reason": reason,
             "recommended_human_check": check,
         }
-        for index, (statement, reason, check) in enumerate(GENERIC_UNCLEAR_ITEMS, start=start)
+        for index, (statement, reason, check) in enumerate(
+            GENERIC_UNCLEAR_ITEMS, start=start
+        )
     ]
 
 
