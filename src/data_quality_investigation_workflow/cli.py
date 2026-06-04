@@ -9,13 +9,15 @@ from typing import Sequence
 
 from data_quality_investigation_workflow import __version__
 from data_quality_investigation_workflow.case_file import write_investigation_case
+from data_quality_investigation_workflow.planning import PLAN_FILENAME, write_investigation_plan
 from data_quality_investigation_workflow.errors import WorkflowUserError
 from data_quality_investigation_workflow.trace import (
     DATASET_PROFILE_FILENAME,
-    write_scaffold_trace,
+    TRACE_FILENAME,
+    write_investigation_trace,
 )
 
-DEFAULT_OUTPUT_DIR = Path("outputs/case_run")
+DEFAULT_OUTPUT_DIR = Path("outputs/plan_run")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,25 +63,35 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.input is None:
+            output_dir = Path(args.output_dir)
+            plan_path = output_dir / PLAN_FILENAME
             case_path = write_investigation_case(
-                output_dir=args.output_dir,
+                output_dir=output_dir,
                 issue_statement=args.issue,
+                plan_path=plan_path,
             )
-            trace_path = write_scaffold_trace(
-                output_dir=args.output_dir,
+            plan_path = write_investigation_plan(
+                output_dir=output_dir,
                 issue_statement=args.issue,
                 case_path=case_path,
             )
+            trace_path = write_investigation_trace(
+                output_dir=output_dir,
+                issue_statement=args.issue,
+                case_path=case_path,
+                plan_path=plan_path,
+            )
             print(f"Investigation case written to {case_path.as_posix()}")
+            print(f"Investigation plan written to {plan_path.as_posix()}")
             print(f"Investigation trace written to {trace_path.as_posix()}")
             return 0
 
         from data_quality_investigation_workflow.intake import load_dataset
-        from data_quality_investigation_workflow.trace import write_profiled_trace
-
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         profile_path = output_dir / DATASET_PROFILE_FILENAME
+        plan_path = output_dir / PLAN_FILENAME
+        trace_path = output_dir / TRACE_FILENAME
 
         loaded_dataset = load_dataset(args.input, sheet=args.sheet)
 
@@ -95,16 +107,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             issue_statement=args.issue,
             loaded_dataset=loaded_dataset,
             profile_path=profile_path,
+            plan_path=plan_path,
         )
-        trace_path = write_profiled_trace(
+        plan_path = write_investigation_plan(
+            output_dir=output_dir,
+            issue_statement=args.issue,
+            loaded_dataset=loaded_dataset,
+            dataset_profile=profile,
+            case_path=case_path,
+            profile_path=profile_path,
+        )
+        trace_path = write_investigation_trace(
             output_dir=output_dir,
             issue_statement=args.issue,
             loaded_dataset=loaded_dataset,
             profile_path=profile_path,
             case_path=case_path,
+            plan_path=plan_path,
         )
         print(f"Investigation case written to {case_path.as_posix()}")
         print(f"Dataset profile written to {profile_path.as_posix()}")
+        print(f"Investigation plan written to {plan_path.as_posix()}")
         print(f"Investigation trace written to {trace_path.as_posix()}")
         return 0
     except WorkflowUserError as error:

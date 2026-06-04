@@ -8,11 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from data_quality_investigation_workflow.trace import (
-    DATASET_PROFILE_FILENAME,
-    IMPLEMENTED_SCOPE,
-    TRACE_FILENAME,
-)
+from data_quality_investigation_workflow.issue_classifier import classify_issue
+from data_quality_investigation_workflow.planning import PLAN_FILENAME
+from data_quality_investigation_workflow.trace import DATASET_PROFILE_FILENAME, TRACE_FILENAME
+from data_quality_investigation_workflow.workflow_scope import IMPLEMENTED_SCOPE, NOT_YET_IMPLEMENTED
 
 if TYPE_CHECKING:
     from data_quality_investigation_workflow.intake import LoadedDataset
@@ -22,23 +21,11 @@ CASE_VERSION = "0.1"
 
 CASE_AUTHORITY_BOUNDARY = [
     "The investigation case records the reported issue and available run context.",
-    "The investigation case does not classify the issue.",
+    "Issue classification is deterministic and used only for planning.",
     "The investigation case does not confirm the reported issue.",
     "The investigation case does not identify root cause.",
     "This tool does not approve, fix, certify, or trust a dataset.",
     "Human review remains the final authority.",
-]
-
-CASE_NOT_YET_IMPLEMENTED = [
-    "issue classification",
-    "investigation planning",
-    "route selection",
-    "deterministic issue checks",
-    "evidence ledger",
-    "hypothesis tracking",
-    "baseline comparison",
-    "Markdown investigation report",
-    "optional LLM notes",
 ]
 
 MISSING_ISSUE_NOTE = (
@@ -55,6 +42,7 @@ def build_investigation_case(
     output_dir: str | Path,
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
+    plan_path: Path | None = None,
     case_id: str | None = None,
     created_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -62,6 +50,7 @@ def build_investigation_case(
     output_path = Path(output_dir)
     case_path = output_path / CASE_FILENAME
     trace_path = output_path / TRACE_FILENAME
+    investigation_plan_path = plan_path or output_path / PLAN_FILENAME
     dataset_profile_path = profile_path
     if loaded_dataset is not None and dataset_profile_path is None:
         dataset_profile_path = output_path / DATASET_PROFILE_FILENAME
@@ -69,16 +58,22 @@ def build_investigation_case(
     artifacts = {
         "investigation_case": case_path.as_posix(),
         "dataset_profile": dataset_profile_path.as_posix() if dataset_profile_path else None,
+        "investigation_plan": investigation_plan_path.as_posix(),
         "investigation_trace": trace_path.as_posix(),
     }
 
     input_provided = loaded_dataset is not None
-    workflow_status = "case_profiled" if input_provided else "case_created"
-    workflow_stage = (
-        "dataset_profiled_case_created"
-        if input_provided
-        else "investigation_case_created"
-    )
+    classification = classify_issue(issue_statement)
+    issue_missing = classification["issue_type"] == "missing_issue_statement"
+    if issue_missing:
+        workflow_status = "plan_not_ready"
+        workflow_stage = "missing_issue_statement"
+    elif input_provided:
+        workflow_status = "profiled_planned"
+        workflow_stage = "dataset_profiled_plan_created"
+    else:
+        workflow_status = "planned"
+        workflow_stage = "investigation_plan_created"
 
     return {
         "artifact_type": "investigation_case",
@@ -90,7 +85,7 @@ def build_investigation_case(
             "status": workflow_status,
             "stage": workflow_stage,
             "implemented_scope": IMPLEMENTED_SCOPE,
-            "not_yet_implemented": CASE_NOT_YET_IMPLEMENTED,
+            "not_yet_implemented": NOT_YET_IMPLEMENTED,
         },
         "dataset_reference": _dataset_reference(
             loaded_dataset=loaded_dataset,
@@ -107,6 +102,7 @@ def write_investigation_case(
     issue_statement: str | None,
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
+    plan_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation case artifact."""
     output_path = Path(output_dir)
@@ -117,20 +113,23 @@ def write_investigation_case(
         output_dir=output_path,
         loaded_dataset=loaded_dataset,
         profile_path=profile_path,
+        plan_path=plan_path,
     )
     case_path.write_text(json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return case_path
 
 
 def _issue_payload(issue_statement: str | None) -> dict[str, Any]:
-    issue_provided = issue_statement is not None
+    classification = classify_issue(issue_statement)
     payload: dict[str, Any] = {
         "statement": issue_statement,
-        "provided": issue_provided,
-        "classification_status": "not_classified",
-        "classification_note": "Issue classification is not implemented in PR #3.",
+        "provided": classification["provided"],
+        "classification_status": classification["classification_status"],
+        "issue_type": classification["issue_type"],
+        "selected_route": classification["selected_route"],
+        "classification_note": "Issue classification is deterministic and used only for planning.",
     }
-    if not issue_provided:
+    if not classification["provided"]:
         payload["missing_issue_note"] = MISSING_ISSUE_NOTE
     return payload
 
