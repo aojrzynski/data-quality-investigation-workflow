@@ -4,8 +4,6 @@ This repository now represents a finished v1 scope for the local-first Data Qual
 
 ## Implemented v1 scope
 
-PR #1 through PR #9 built the main workflow:
-
 - CLI entry point and output directory handling;
 - local CSV/Excel intake;
 - safe aggregate dataset profiling;
