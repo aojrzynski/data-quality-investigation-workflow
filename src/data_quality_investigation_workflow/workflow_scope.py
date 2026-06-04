@@ -15,20 +15,20 @@ IMPLEMENTED_SCOPE = [
     "deterministic current-dataset issue checks",
     "aggregate-only evidence ledger",
     "safe aggregate baseline comparison",
+    "hypothesis tracking from aggregate evidence IDs",
+    "cautious investigation finding summaries",
 ]
 
 NOT_YET_IMPLEMENTED = [
-    "hypothesis tracking",
     "Markdown investigation report",
     "optional LLM notes",
-    "final findings artifact",
 ]
 
 AUTHORITY_BOUNDARY = [
     "Profiling is not investigation.",
     "Issue classification is a planning aid only.",
     "Deterministic checks record aggregate evidence signals only.",
-    "Evidence signals are not final findings.",
+    "Evidence signals and finding summaries are not final verdicts.",
     "The workflow does not confirm the reported issue.",
     "The workflow does not identify root cause.",
     "This tool does not approve, fix, certify, or trust a dataset.",

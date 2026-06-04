@@ -166,8 +166,8 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_evidence_and_trace(
     assert case["issue"]["classification_status"] == "classified_for_planning"
     assert case["issue"]["issue_type"] == "duplicate_key"
     assert case["issue"]["selected_route"] == "duplicate_key_investigation"
-    assert case["workflow"]["status"] == "evidence_recorded"
-    assert case["workflow"]["stage"] == "deterministic_checks_recorded"
+    assert case["workflow"]["status"] == "findings_summarized"
+    assert case["workflow"]["stage"] == "hypotheses_and_findings_created"
     assert case["dataset_reference"] == {
         "input_provided": True,
         "file_name": "customer_quality_snapshot.csv",
@@ -177,18 +177,18 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_evidence_and_trace(
         "column_count": 6,
         "profile_artifact": profile_path.as_posix(),
     }
-    assert case["artifacts"] == {
-        "investigation_case": case_path.as_posix(),
-        "dataset_profile": profile_path.as_posix(),
-        "investigation_plan": plan_path.as_posix(),
-        "evidence_ledger": ledger_path.as_posix(),
-        "investigation_trace": trace_path.as_posix(),
-    }
+    assert case["artifacts"]["investigation_case"] == case_path.as_posix()
+    assert case["artifacts"]["dataset_profile"] == profile_path.as_posix()
+    assert case["artifacts"]["investigation_plan"] == plan_path.as_posix()
+    assert case["artifacts"]["evidence_ledger"] == ledger_path.as_posix()
+    assert case["artifacts"]["hypothesis_tracker"] == (output_dir / "hypothesis_tracker.json").as_posix()
+    assert case["artifacts"]["investigation_findings"] == (output_dir / "investigation_findings.json").as_posix()
+    assert case["artifacts"]["investigation_trace"] == trace_path.as_posix()
 
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace["issue_statement"] == issue
-    assert trace["status"] == "evidence_recorded"
-    assert trace["stage"] == "deterministic_checks_recorded"
+    assert trace["status"] == "findings_summarized"
+    assert trace["stage"] == "hypotheses_and_findings_created"
     assert trace["planning"]["issue_type"] == "duplicate_key"
     assert trace["planning"]["route_name"] == "duplicate_key_investigation"
     assert trace["dataset"] == {
@@ -198,13 +198,13 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_evidence_and_trace(
         "row_count": 12,
         "column_count": 6,
     }
-    assert trace["artifacts"] == {
-        "investigation_case": case_path.as_posix(),
-        "dataset_profile": profile_path.as_posix(),
-        "investigation_plan": plan_path.as_posix(),
-        "evidence_ledger": ledger_path.as_posix(),
-        "investigation_trace": trace_path.as_posix(),
-    }
+    assert trace["artifacts"]["investigation_case"] == case_path.as_posix()
+    assert trace["artifacts"]["dataset_profile"] == profile_path.as_posix()
+    assert trace["artifacts"]["investigation_plan"] == plan_path.as_posix()
+    assert trace["artifacts"]["evidence_ledger"] == ledger_path.as_posix()
+    assert trace["artifacts"]["hypothesis_tracker"] == (output_dir / "hypothesis_tracker.json").as_posix()
+    assert trace["artifacts"]["investigation_findings"] == (output_dir / "investigation_findings.json").as_posix()
+    assert trace["artifacts"]["investigation_trace"] == trace_path.as_posix()
     assert "columns" not in trace
     assert "safety_notes" not in trace
 
@@ -879,3 +879,292 @@ def _evidence_item(ledger: dict[str, Any], check_id: str) -> dict[str, Any] | No
         (item for item in ledger["evidence_items"] if item["check_id"] == check_id),
         None,
     )
+
+
+def test_pr7_current_duplicate_run_writes_hypotheses_and_findings(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "customer_findings_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    for name in [
+        "investigation_case.json",
+        "dataset_profile.json",
+        "investigation_plan.json",
+        "evidence_ledger.json",
+        "hypothesis_tracker.json",
+        "investigation_findings.json",
+        "investigation_trace.json",
+    ]:
+        assert (output_dir / name).exists()
+    assert "Hypothesis tracker written to" in result.stdout
+    assert "Investigation findings written to" in result.stdout
+
+    tracker = json.loads((output_dir / "hypothesis_tracker.json").read_text(encoding="utf-8"))
+    assert tracker["issue"]["issue_type"] == "duplicate_key"
+    assert tracker["hypotheses"]
+    duplicate_hypothesis = next(
+        item for item in tracker["hypotheses"] if "duplicate non-null" in item["statement"]
+    )
+    assert duplicate_hypothesis["supporting_evidence_ids"]
+    assert all(isinstance(evidence_id, str) for evidence_id in duplicate_hypothesis["supporting_evidence_ids"])
+
+    findings = json.loads((output_dir / "investigation_findings.json").read_text(encoding="utf-8"))
+    assert findings["finding_status"] == "review_required"
+    assert findings["supported_signals"] or findings["unclear_items"]
+
+
+def test_pr7_baseline_null_run_maps_baseline_signal_to_findings(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_findings_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    for name in [
+        "investigation_case.json",
+        "dataset_profile.json",
+        "baseline_profile.json",
+        "investigation_plan.json",
+        "baseline_comparison.json",
+        "evidence_ledger.json",
+        "hypothesis_tracker.json",
+        "investigation_findings.json",
+        "investigation_trace.json",
+    ]:
+        assert (output_dir / name).exists()
+
+    tracker = json.loads((output_dir / "hypothesis_tracker.json").read_text(encoding="utf-8"))
+    baseline_hypotheses = [
+        item
+        for item in tracker["hypotheses"]
+        if "higher null percentage than the baseline" in item["statement"]
+    ]
+    assert baseline_hypotheses
+    assert baseline_hypotheses[0]["status"] == "supported_by_evidence"
+    assert baseline_hypotheses[0]["supporting_evidence_ids"]
+
+    findings = json.loads((output_dir / "investigation_findings.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(findings).casefold()
+    assert any(
+        baseline_hypotheses[0]["hypothesis_id"] in signal["related_hypotheses"]
+        for signal in findings["supported_signals"]
+    )
+    assert "issue confirmed" not in serialized
+    assert "root cause identified" not in serialized
+    assert "proved" not in serialized
+
+
+def test_pr7_no_input_run_does_not_write_hypothesis_or_findings(tmp_path: Path) -> None:
+    output_dir = tmp_path / "plan_run"
+
+    result = run_cli(
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not (output_dir / "hypothesis_tracker.json").exists()
+    assert not (output_dir / "investigation_findings.json").exists()
+    trace = json.loads((output_dir / "investigation_trace.json").read_text(encoding="utf-8"))
+    assert trace["stage"] == "investigation_plan_created"
+    assert "hypotheses" not in trace
+    assert "findings" not in trace
+    assert "hypothesis_tracker" not in trace["artifacts"]
+    assert "investigation_findings" not in trace["artifacts"]
+
+
+def test_pr7_missing_issue_with_input_does_not_write_hypothesis_or_findings(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "missing_issue"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["execution"]["status"] == "not_executed"
+    assert not (output_dir / "hypothesis_tracker.json").exists()
+    assert not (output_dir / "investigation_findings.json").exists()
+    trace = json.loads((output_dir / "investigation_trace.json").read_text(encoding="utf-8"))
+    assert trace["stage"] == "missing_issue_statement"
+    assert "hypotheses" not in trace
+    assert "findings" not in trace
+
+
+def test_pr7_schema_baseline_findings_include_schema_checks_and_safe_values(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "schema_findings"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Header changed in the customer file",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    tracker = json.loads((output_dir / "hypothesis_tracker.json").read_text(encoding="utf-8"))
+    assert tracker["issue"]["selected_route"] == "schema_change_investigation"
+    schema_hypothesis = next(
+        item for item in tracker["hypotheses"] if "Current and baseline schemas differ" in item["statement"]
+    )
+    assert schema_hypothesis["status"] in {"supported_by_evidence", "not_supported_by_evidence"}
+    findings = json.loads((output_dir / "investigation_findings.json").read_text(encoding="utf-8"))
+    assert "Confirm expected required columns" in json.dumps(findings)
+    _assert_pr7_artifact_safety(tracker)
+    _assert_pr7_artifact_safety(findings)
+
+
+def test_pr7_date_route_mentions_daily_cadence_without_missing_date_lists(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "date_findings"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "A date gap appeared in the signup_date field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    tracker = json.loads((output_dir / "hypothesis_tracker.json").read_text(encoding="utf-8"))
+    findings = json.loads((output_dir / "investigation_findings.json").read_text(encoding="utf-8"))
+    assert "Daily cadence is an assumption" in json.dumps(tracker)
+    assert "Confirm the expected date cadence" in json.dumps(findings)
+    assert "missing_dates" not in json.dumps(tracker)
+    assert "missing_dates" not in json.dumps(findings)
+
+
+def test_pr7_trace_contains_concise_hypothesis_and_finding_metadata(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "trace_findings"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    trace = json.loads((output_dir / "investigation_trace.json").read_text(encoding="utf-8"))
+    assert trace["artifacts"]["hypothesis_tracker"] == (output_dir / "hypothesis_tracker.json").as_posix()
+    assert trace["artifacts"]["investigation_findings"] == (output_dir / "investigation_findings.json").as_posix()
+    assert trace["hypotheses"]["hypothesis_count"] >= 1
+    assert trace["findings"]["finding_status"] == "review_required"
+    assert "hypotheses" not in trace["hypotheses"]
+    assert "supported_signals" not in trace
+    assert "evidence_items" not in trace
+
+
+def test_pr7_findings_structure_is_id_reference_only_and_deduplicated(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "findings_structure"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    tracker = json.loads((output_dir / "hypothesis_tracker.json").read_text(encoding="utf-8"))
+    findings = json.loads((output_dir / "investigation_findings.json").read_text(encoding="utf-8"))
+    supported_hypothesis_ids = {
+        item["hypothesis_id"] for item in tracker["hypotheses"] if item["status"] == "supported_by_evidence"
+    }
+    supported_signal_hypothesis_ids = {
+        hypothesis_id
+        for signal in findings["supported_signals"]
+        for hypothesis_id in signal["related_hypotheses"]
+    }
+    assert supported_signal_hypothesis_ids <= supported_hypothesis_ids
+    assert len(findings["recommended_human_checks"]) == len(set(findings["recommended_human_checks"]))
+    for signal in findings["supported_signals"] + findings["not_supported_signals"]:
+        assert all(str(evidence_id).startswith("ev-") for evidence_id in signal["related_evidence_ids"])
+        assert "metrics" not in signal
+
+
+def test_pr7_hypothesis_and_findings_safety_boundaries(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "pr7_safety"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    for name in ["hypothesis_tracker.json", "investigation_findings.json"]:
+        payload = json.loads((output_dir / name).read_text(encoding="utf-8"))
+        _assert_pr7_artifact_safety(payload)
+
+
+def _assert_pr7_artifact_safety(payload: dict[str, Any]) -> None:
+    forbidden_keys = {*FORBIDDEN_KEYS, "generated_code"}
+    assert _find_forbidden_keys_with_set(payload, forbidden_keys) == []
+    serialized = json.dumps(payload).casefold()
+    assert "avery@example.test" not in serialized
+    assert "cust-001" not in serialized
+    for phrase in [
+        "approved",
+        "certified",
+        "production-ready",
+        "compliant verdict",
+        "root cause identified",
+        "issue confirmed",
+        "proved",
+    ]:
+        assert phrase not in serialized
+
+
+def _find_forbidden_keys_with_set(value: Any, forbidden_keys: set[str]) -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in forbidden_keys:
+                found.append(key)
+            found.extend(_find_forbidden_keys_with_set(child, forbidden_keys))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_find_forbidden_keys_with_set(child, forbidden_keys))
+    return found

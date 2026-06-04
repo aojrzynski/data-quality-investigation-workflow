@@ -15,6 +15,8 @@ from data_quality_investigation_workflow.baseline import (
 )
 from data_quality_investigation_workflow.case_file import write_investigation_case
 from data_quality_investigation_workflow.evidence import LEDGER_FILENAME, write_evidence_ledger
+from data_quality_investigation_workflow.findings import FINDINGS_FILENAME, write_investigation_findings
+from data_quality_investigation_workflow.hypotheses import HYPOTHESIS_TRACKER_FILENAME, write_hypothesis_tracker
 from data_quality_investigation_workflow.errors import DatasetIntakeError, WorkflowUserError
 from data_quality_investigation_workflow.intake import EXCEL_EXTENSIONS, load_dataset
 from data_quality_investigation_workflow.issue_classifier import classify_issue
@@ -140,6 +142,11 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
 
     loaded_dataset = load_dataset(args.input, sheet=args.sheet)
     classification = classify_issue(args.issue)
+    issue_provided = bool(classification.get("provided"))
+    hypothesis_tracker_path = (
+        output_dir / HYPOTHESIS_TRACKER_FILENAME if issue_provided else None
+    )
+    findings_path = output_dir / FINDINGS_FILENAME if issue_provided else None
     profile = build_dataset_profile(loaded_dataset)
     _write_json(profile_path, profile)
 
@@ -171,6 +178,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         baseline_dataset=baseline_dataset,
         baseline_profile_path=baseline_profile_path if baseline_dataset else None,
         baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+        hypothesis_tracker_path=hypothesis_tracker_path,
+        findings_path=findings_path,
     )
     plan_path = write_investigation_plan(
         output_dir=output_dir,
@@ -183,6 +192,8 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         baseline_dataset=baseline_dataset,
         baseline_profile_path=baseline_profile_path if baseline_dataset else None,
         baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+        hypothesis_tracker_path=hypothesis_tracker_path,
+        findings_path=findings_path,
     )
     investigation_plan = json.loads(plan_path.read_text(encoding="utf-8"))
     ledger_path = write_evidence_ledger(
@@ -202,6 +213,55 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
         baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
     )
     ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+    hypothesis_metadata = None
+    findings_metadata = None
+    if issue_provided and ledger["execution"]["status"] == "checks_executed":
+        artifact_refs = _artifact_refs(
+            case_path=case_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            ledger_path=ledger_path,
+            trace_path=trace_path,
+            baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+            baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+            hypothesis_tracker_path=hypothesis_tracker_path,
+            findings_path=findings_path,
+        )
+        assert hypothesis_tracker_path is not None
+        assert findings_path is not None
+        hypothesis_tracker_path = write_hypothesis_tracker(
+            output_dir=output_dir,
+            issue_statement=args.issue,
+            classification=classification,
+            investigation_plan=investigation_plan,
+            evidence_ledger=ledger,
+            artifacts=artifact_refs,
+            baseline_comparison_available=baseline_comparison is not None,
+        )
+        hypothesis_tracker = json.loads(hypothesis_tracker_path.read_text(encoding="utf-8"))
+        findings_path = write_investigation_findings(
+            output_dir=output_dir,
+            issue_statement=args.issue,
+            classification=classification,
+            hypothesis_tracker=hypothesis_tracker,
+            evidence_ledger=ledger,
+            artifacts=artifact_refs,
+            baseline_comparison_available=baseline_comparison is not None,
+        )
+        findings = json.loads(findings_path.read_text(encoding="utf-8"))
+        hypothesis_metadata = {
+            "hypothesis_count": len(hypothesis_tracker["hypotheses"]),
+            "supported_hypothesis_count": hypothesis_tracker["hypothesis_summary"]["supported_by_evidence"],
+            "unclear_hypothesis_count": hypothesis_tracker["hypothesis_summary"]["unclear"],
+            "not_supported_hypothesis_count": hypothesis_tracker["hypothesis_summary"]["not_supported_by_evidence"],
+        }
+        findings_metadata = {
+            "supported_signal_count": findings["summary"]["supported_signal_count"],
+            "unclear_item_count": len(findings["unclear_items"]),
+            "finding_status": findings["finding_status"],
+        }
+
     trace_path = write_investigation_trace(
         output_dir=output_dir,
         issue_statement=args.issue,
@@ -219,6 +279,10 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
             "evidence_item_count": ledger["execution"]["evidence_item_count"],
             "checks_not_run_count": ledger["execution"]["checks_not_run_count"],
         },
+        hypothesis_tracker_path=hypothesis_tracker_path,
+        findings_path=findings_path,
+        hypothesis_metadata=hypothesis_metadata,
+        findings_metadata=findings_metadata,
     )
     print(f"Investigation case written to {case_path.as_posix()}")
     print(f"Dataset profile written to {profile_path.as_posix()}")
@@ -228,8 +292,42 @@ def _run_dataset_workflow(args: argparse.Namespace) -> None:
     if baseline_dataset is not None:
         print(f"Baseline comparison written to {baseline_comparison_path.as_posix()}")
     print(f"Evidence ledger written to {ledger_path.as_posix()}")
+    if hypothesis_tracker_path is not None:
+        print(f"Hypothesis tracker written to {hypothesis_tracker_path.as_posix()}")
+    if findings_path is not None:
+        print(f"Investigation findings written to {findings_path.as_posix()}")
     print(f"Investigation trace written to {trace_path.as_posix()}")
 
+
+
+def _artifact_refs(
+    *,
+    case_path: Path,
+    profile_path: Path,
+    plan_path: Path,
+    ledger_path: Path,
+    trace_path: Path,
+    baseline_profile_path: Path | None,
+    baseline_comparison_path: Path | None,
+    hypothesis_tracker_path: Path | None,
+    findings_path: Path | None,
+) -> dict[str, str | None]:
+    artifacts: dict[str, str | None] = {
+        "investigation_case": case_path.as_posix(),
+        "dataset_profile": profile_path.as_posix(),
+        "investigation_plan": plan_path.as_posix(),
+        "evidence_ledger": ledger_path.as_posix(),
+        "investigation_trace": trace_path.as_posix(),
+    }
+    if baseline_profile_path is not None:
+        artifacts["baseline_profile"] = baseline_profile_path.as_posix()
+    if baseline_comparison_path is not None:
+        artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
+    if hypothesis_tracker_path is not None:
+        artifacts["hypothesis_tracker"] = hypothesis_tracker_path.as_posix()
+    if findings_path is not None:
+        artifacts["investigation_findings"] = findings_path.as_posix()
+    return artifacts
 
 def _load_baseline_dataset(path: Path, sheet: str | None):
     try:
