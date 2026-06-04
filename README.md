@@ -2,7 +2,7 @@
 
 Data Quality Investigation Workflow is a local-first Python project for investigating known or suspected data quality issues. The goal is to help a human reviewer move from an issue statement, such as "Customer IDs have started duplicating," to a structured investigation record with deterministic evidence, clear open questions, and reviewable artifacts.
 
-This repository is at **PR #3 investigation case file foundation status**. The current implementation can create an `investigation_case.json` with the reported issue and run context, run without input as a case-only/scaffold run, or load a local CSV/XLSX/XLSM dataset and write a safe aggregate `dataset_profile.json` plus an updated `investigation_trace.json`. Case creation and profiling are foundation steps only; they do not investigate, confirm, or explain the reported issue.
+This repository is at **PR #4 investigation planning and route selection status**. The current implementation can create an `investigation_case.json`, classify issue statements for planning only, select a planned investigation route, create an `investigation_plan.json` with planned check records marked `planned_not_run`, run without input as a case + plan run, or load a local CSV/XLSX/XLSM dataset and write a safe aggregate `dataset_profile.json` plus an updated `investigation_trace.json`. Case creation, profiling, and planning are foundation steps only; they do not run issue-specific checks, create evidence findings, confirm the reported issue, or identify root cause.
 
 ## The problem
 
@@ -36,25 +36,27 @@ What exists now:
 - package code under `src/data_quality_investigation_workflow`;
 - `dq-investigate` CLI entry point;
 - `--input`, `--sheet`, `--issue`, `--output-dir`, and `--version` CLI options;
-- case-only/scaffold runs when `--input` is omitted;
+- case + plan runs when `--input` is omitted;
 - `investigation_case.json` generation for issue-led case context;
+- deterministic issue classification for planning only;
+- planned route selection;
+- `investigation_plan.json` generation with planned check records marked `planned_not_run`;
 - local CSV/XLSX/XLSM dataset intake;
 - optional Excel sheet selection with `--sheet`;
 - safe aggregate `dataset_profile.json` generation when input is supplied;
-- updated `investigation_trace.json` generation that references the case artifact;
+- updated `investigation_trace.json` generation that references case, plan, profile artifacts when available, and concise route metadata;
 - a small synthetic customer example dataset;
 - pytest tests, Ruff checks, and GitHub Actions CI.
 
 What does not exist yet:
 
-- issue classification;
-- investigation planning;
-- route selection;
 - issue-specific deterministic data checks;
 - evidence ledger logic;
 - hypothesis tracking;
-- baseline comparison;
+- baseline comparison execution;
 - Markdown report generation;
+- proof that the issue exists;
+- root-cause identification;
 - LangGraph orchestration;
 - OpenAI or other LLM integration.
 
@@ -64,7 +66,7 @@ Every successful run writes `investigation_case.json`. The case file records the
 
 If `--issue` is omitted, the case file is still written. In that situation, `issue.provided` is `false`, `issue.statement` is `null`, and the file includes a note that later investigation steps will be more useful when an issue statement is supplied.
 
-The case file does **not** classify the issue, confirm the issue, identify root cause, approve the data, or include raw rows or value previews.
+The case file includes deterministic planning classification metadata, but that classification is only a planning aid. The case file does **not** confirm the issue, identify root cause, approve the data, or include raw rows or value previews.
 
 ## Safe aggregate profiling
 
@@ -113,7 +115,7 @@ A suspected data quality issue usually needs multiple steps, not a single answer
 - what is confirmed, not confirmed, or still unclear;
 - what a human should check next.
 
-PR #3 adds the investigation case file foundation. Later PRs will add investigation planning, route selection, checks, evidence, hypotheses, findings, and reports one step at a time.
+PR #4 adds deterministic planning classification, route selection, and an investigation plan artifact. Later PRs will add checks, evidence, hypotheses, findings, and reports one step at a time.
 
 ## Quick start
 
@@ -123,37 +125,39 @@ Use Python 3.11 or newer.
 python -m pip install -e ".[dev]"
 ```
 
-Run a case-only/scaffold command:
+Run a case + plan command:
 
 ```bash
-dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/case_run
+dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/plan_run
 ```
 
 The command writes:
 
 ```text
-outputs/case_run/investigation_case.json
-outputs/case_run/investigation_trace.json
+outputs/plan_run/investigation_case.json
+outputs/plan_run/investigation_plan.json
+outputs/plan_run/investigation_trace.json
 ```
 
-Run a CSV case + profile command:
+Run a CSV case + profile + plan command:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_case_profile
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_plan_profile
 ```
 
 The command writes:
 
 ```text
-outputs/customer_case_profile/investigation_case.json
-outputs/customer_case_profile/dataset_profile.json
-outputs/customer_case_profile/investigation_trace.json
+outputs/customer_plan_profile/investigation_case.json
+outputs/customer_plan_profile/dataset_profile.json
+outputs/customer_plan_profile/investigation_plan.json
+outputs/customer_plan_profile/investigation_trace.json
 ```
 
 Equivalent module command:
 
 ```bash
-python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_case_profile
+python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_plan_profile
 ```
 
 ## Example commands
@@ -170,35 +174,35 @@ Show the package version:
 dq-investigate --version
 ```
 
-Case-only/scaffold run without dataset input:
+Case + plan run without dataset input:
 
 ```bash
-dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/case_run
+dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/plan_run
 ```
 
-CSV case + profile:
+CSV case + profile + plan:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_case_profile
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_plan_profile
 ```
 
-Excel case + profile:
+Excel case + profile + plan:
 
 ```bash
-dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_case_profile
+dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_plan_profile
 ```
 
 ## Output artifacts
 
-Implemented in PR #3:
+Implemented in PR #4:
 
-- `investigation_case.json` — records the issue statement if supplied, case ID, creation time, workflow status/stage, dataset reference metadata when available, artifact paths, scope boundaries, and authority boundaries.
+- `investigation_case.json` — records the issue statement if supplied, deterministic planning classification metadata, selected route, case ID, creation time, workflow status/stage, dataset reference metadata when available, artifact paths, scope boundaries, and authority boundaries.
 - `dataset_profile.json` — safe aggregate dataset metadata and column summaries. Written only when `--input` is provided.
-- `investigation_trace.json` — records whether the run was case-only or dataset-profiled, the issue statement if supplied, implemented scope, remaining not-yet-implemented workflow pieces, concise profiled dataset metadata when relevant, artifact paths, and authority boundaries.
+- `investigation_plan.json` — records the issue statement, planning classification status, deterministic issue type, selected route, planned checks with `planned_not_run` status, required/available/missing inputs, safe candidate columns from column names/profile metadata only, limitations, human review prompts, artifact paths, and authority boundaries.
+- `investigation_trace.json` — records whether the run was planned or dataset-profiled and planned, the issue statement if supplied, concise route metadata, implemented scope, remaining not-yet-implemented workflow pieces, concise profiled dataset metadata when relevant, artifact paths, and authority boundaries.
 
 Planned for future PRs, not implemented yet:
 
-- `investigation_plan.json`;
 - `evidence_ledger.json`;
 - `hypothesis_tracker.json`;
 - `investigation_findings.json`;
@@ -209,7 +213,7 @@ Planned for future PRs, not implemented yet:
 This project is meant to support human review, not replace it. It must not claim to:
 
 - treat profiling as investigation;
-- classify, confirm, or explain the reported issue in PR #3;
+- treat planning classification as evidence, confirmation, or explanation of the reported issue;
 - identify root cause from a case file or profile alone;
 - fix data;
 - approve, certify, or trust a dataset;
@@ -238,12 +242,16 @@ Human review remains the final authority.
 │       ├── cli.py
 │       ├── errors.py
 │       ├── intake.py
+│       ├── issue_classifier.py
+│       ├── planning.py
 │       ├── profiling.py
-│       └── trace.py
+│       ├── trace.py
+│       └── workflow_scope.py
 ├── tests/
 │   ├── test_build_backend.py
 │   ├── test_cli.py
 │   ├── test_intake.py
+│   ├── test_issue_classifier.py
 │   └── test_profiling.py
 ├── LICENSE
 ├── README.md
@@ -262,22 +270,25 @@ The CI workflow runs compile, pytest, and Ruff checks on pull requests and pushe
 
 ## Limitations and non-goals
 
-For PR #3, this repository intentionally does not include:
+For PR #4, this repository intentionally does not include:
 
-- issue classification;
-- `investigation_plan.json`;
 - `evidence_ledger.json`;
 - `hypothesis_tracker.json`;
 - `investigation_findings.json`;
 - `investigation_report.md`;
-- baseline/current comparison;
+- issue-specific deterministic checks;
+- evidence findings;
+- evidence ledger execution;
+- hypothesis tracking;
+- baseline/current comparison execution;
+- root-cause identification;
 - LangGraph orchestration;
 - OpenAI or other LLM code;
 - arbitrary generated code execution;
 - database or cloud connectors;
 - committed generated outputs.
 
-The investigation case and dataset profile are useful foundation artifacts. They are not investigation results and do not confirm whether the reported issue exists.
+The investigation case, dataset profile, and investigation plan are useful foundation artifacts. They are not investigation results and do not confirm whether the reported issue exists.
 
 ## Further reading
 
