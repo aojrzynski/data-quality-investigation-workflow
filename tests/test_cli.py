@@ -22,6 +22,9 @@ FORBIDDEN_KEYS = {
     "value_preview",
     "value_previews",
     "raw_failing_records",
+    "row_numbers",
+    "duplicated_values",
+    "category_labels",
 }
 
 
@@ -66,7 +69,9 @@ def test_cli_case_plan_run_writes_case_plan_and_trace(tmp_path: Path) -> None:
     assert case_path.exists()
     assert trace_path.exists()
     assert plan_path.exists()
+    ledger_path = output_dir / "evidence_ledger.json"
     assert not profile_path.exists()
+    assert not ledger_path.exists()
     assert f"Investigation case written to {case_path.as_posix()}" in result.stdout
     assert f"Investigation plan written to {plan_path.as_posix()}" in result.stdout
     assert f"Investigation trace written to {trace_path.as_posix()}" in result.stdout
@@ -92,6 +97,7 @@ def test_cli_case_plan_run_writes_case_plan_and_trace(tmp_path: Path) -> None:
     assert case["artifacts"]["investigation_case"] == case_path.as_posix()
     assert case["artifacts"]["dataset_profile"] is None
     assert case["artifacts"]["investigation_plan"] == plan_path.as_posix()
+    assert case["artifacts"]["evidence_ledger"] is None
     assert case["artifacts"]["investigation_trace"] == trace_path.as_posix()
 
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
@@ -102,14 +108,15 @@ def test_cli_case_plan_run_writes_case_plan_and_trace(tmp_path: Path) -> None:
     assert trace["planning"]["route_name"] == "duplicate_key_investigation"
     assert trace["artifacts"]["investigation_case"] == case_path.as_posix()
     assert trace["artifacts"]["investigation_plan"] == plan_path.as_posix()
+    assert trace["artifacts"]["evidence_ledger"] is None
     assert trace["artifacts"]["investigation_trace"] == trace_path.as_posix()
     assert "safe aggregate dataset profiling" in trace["implemented_scope"]
     assert "investigation case file" in trace["implemented_scope"]
-    assert "deterministic issue checks" in trace["not_yet_implemented"]
+    assert "deterministic current-dataset issue checks" in trace["implemented_scope"]
     assert "Human review remains the final authority." in trace["authority_boundary"]
 
 
-def test_cli_profiled_case_plan_run_writes_case_profile_plan_and_trace(tmp_path: Path) -> None:
+def test_cli_profiled_case_plan_run_writes_case_profile_plan_evidence_and_trace(tmp_path: Path) -> None:
     pytest.importorskip("pandas")
     output_dir = tmp_path / "customer_plan_profile"
     issue = "Customer IDs have started duplicating"
@@ -127,14 +134,17 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_and_trace(tmp_path:
     profile_path = output_dir / "dataset_profile.json"
     trace_path = output_dir / "investigation_trace.json"
     plan_path = output_dir / "investigation_plan.json"
+    ledger_path = output_dir / "evidence_ledger.json"
     assert result.returncode == 0, result.stderr
     assert case_path.exists()
     assert profile_path.exists()
     assert trace_path.exists()
     assert plan_path.exists()
+    assert ledger_path.exists()
     assert f"Investigation case written to {case_path.as_posix()}" in result.stdout
     assert f"Dataset profile written to {profile_path.as_posix()}" in result.stdout
     assert f"Investigation plan written to {plan_path.as_posix()}" in result.stdout
+    assert f"Evidence ledger written to {ledger_path.as_posix()}" in result.stdout
     assert f"Investigation trace written to {trace_path.as_posix()}" in result.stdout
 
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
@@ -155,8 +165,8 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_and_trace(tmp_path:
     assert case["issue"]["classification_status"] == "classified_for_planning"
     assert case["issue"]["issue_type"] == "duplicate_key"
     assert case["issue"]["selected_route"] == "duplicate_key_investigation"
-    assert case["workflow"]["status"] == "profiled_planned"
-    assert case["workflow"]["stage"] == "dataset_profiled_plan_created"
+    assert case["workflow"]["status"] == "evidence_recorded"
+    assert case["workflow"]["stage"] == "deterministic_checks_recorded"
     assert case["dataset_reference"] == {
         "input_provided": True,
         "file_name": "customer_quality_snapshot.csv",
@@ -170,13 +180,14 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_and_trace(tmp_path:
         "investigation_case": case_path.as_posix(),
         "dataset_profile": profile_path.as_posix(),
         "investigation_plan": plan_path.as_posix(),
+        "evidence_ledger": ledger_path.as_posix(),
         "investigation_trace": trace_path.as_posix(),
     }
 
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace["issue_statement"] == issue
-    assert trace["status"] == "profiled_planned"
-    assert trace["stage"] == "dataset_profiled_plan_created"
+    assert trace["status"] == "evidence_recorded"
+    assert trace["stage"] == "deterministic_checks_recorded"
     assert trace["planning"]["issue_type"] == "duplicate_key"
     assert trace["planning"]["route_name"] == "duplicate_key_investigation"
     assert trace["dataset"] == {
@@ -190,6 +201,7 @@ def test_cli_profiled_case_plan_run_writes_case_profile_plan_and_trace(tmp_path:
         "investigation_case": case_path.as_posix(),
         "dataset_profile": profile_path.as_posix(),
         "investigation_plan": plan_path.as_posix(),
+        "evidence_ledger": ledger_path.as_posix(),
         "investigation_trace": trace_path.as_posix(),
     }
     assert "columns" not in trace
@@ -266,7 +278,7 @@ def test_investigation_plan_does_not_include_raw_rows_values_or_findings(
     assert "CUST-001" not in serialized
     assert "confirmed_findings" not in serialized
     assert "root_cause" not in serialized
-    assert "evidence_ledger" not in serialized
+    assert plan["artifacts"]["evidence_ledger"] is not None
 
 
 def test_cli_rejects_unsupported_file_extension(tmp_path: Path) -> None:
@@ -390,3 +402,194 @@ def _find_forbidden_keys(value: Any) -> list[str]:
         for child in value:
             found.extend(_find_forbidden_keys(child))
     return found
+
+
+def test_duplicate_key_evidence_ledger_records_aggregate_signal(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "customer_evidence_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["issue"]["issue_type"] == "duplicate_key"
+    assert ledger["issue"]["selected_route"] == "duplicate_key_investigation"
+    assert ledger["evidence_items"]
+    assert any("customer_id" in item["related_columns"] for item in ledger["evidence_items"])
+    duplicate_item = next(
+        item for item in ledger["evidence_items"] if item["check_id"] == "duplicate_key_summary"
+    )
+    assert duplicate_item["signal"] == "present"
+    assert duplicate_item["metrics"]["columns_with_duplicate_non_null_values"] >= 1
+    assert duplicate_item["metrics"]["max_duplicate_value_count"] >= 1
+    serialized = json.dumps(ledger)
+    assert "CUST-001" not in serialized
+    assert "CUST-010" not in serialized
+
+
+def test_missing_issue_with_input_writes_not_executed_ledger(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "missing_issue_evidence"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["execution"]["status"] == "not_executed"
+    assert ledger["evidence_items"] == []
+    assert "No issue statement was supplied" in ledger["execution"]["reason"]
+
+
+def test_null_issue_evidence_is_current_only(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "null_evidence"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["issue"]["selected_route"] == "null_increase_investigation"
+    item = ledger["evidence_items"][0]
+    assert item["check_id"] == "current_null_summary"
+    assert "cannot determine whether nulls increased without a baseline" in item["summary"]
+    assert item["metrics"]["total_null_cells"] >= 1
+    assert "baseline_delta" not in json.dumps(item)
+
+
+def test_date_gap_evidence_uses_aggregate_period_metrics(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "date_evidence"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "A date gap appeared in the signup_date field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["issue"]["selected_route"] == "date_gap_investigation"
+    gap_item = next(item for item in ledger["evidence_items"] if item["check_id"] == "date_gap_summary")
+    assert "min_date" in gap_item["metrics"]
+    assert "max_date" in gap_item["metrics"]
+    assert "missing_daily_period_count" in gap_item["metrics"]
+    assert "missing_dates" not in json.dumps(ledger)
+
+
+def test_schema_route_evidence_is_current_schema_only(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "schema_evidence"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Header changed in the customer file",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["issue"]["selected_route"] == "schema_change_investigation"
+    item = ledger["evidence_items"][0]
+    assert item["check_id"] == "current_schema_summary"
+    assert "inferred_kind_counts" in item["metrics"]
+    assert ledger["execution"]["baseline_available"] is False
+
+
+def test_evidence_ledger_safety_boundaries(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "safe_evidence"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert _find_forbidden_keys(ledger) == []
+    serialized = json.dumps(ledger)
+    assert "avery@example.test" not in serialized
+    assert "CUST-001" not in serialized
+    assert "root_cause" not in serialized
+    assert "final_finding" not in serialized
+    assert "confirmed_findings" not in serialized
+    assert "hypothesis_tracker" not in serialized
+
+
+def test_trace_evidence_metadata_is_concise(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "trace_evidence"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    trace = json.loads((output_dir / "investigation_trace.json").read_text(encoding="utf-8"))
+    assert trace["artifacts"]["evidence_ledger"] == (output_dir / "evidence_ledger.json").as_posix()
+    assert trace["evidence"]["evidence_item_count"] >= 1
+    assert trace["evidence"]["checks_executed_count"] >= 1
+    assert "evidence_items" not in trace
+
+
+def test_planned_check_requirement_flags_are_precise(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "plan_flags"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    plan = json.loads((output_dir / "investigation_plan.json").read_text(encoding="utf-8"))
+    assert not all(check["requires_raw_dataset"] for check in plan["planned_checks"])
+    baseline_checks = [check for check in plan["planned_checks"] if check["requires_baseline"]]
+    assert baseline_checks
+    assert all(check["status"] == "planned_not_run" for check in baseline_checks)
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert all("baseline" in item["reason"].casefold() for item in ledger["checks_not_run"] if "baseline" in item["check_id"])
+
+
+def test_no_code_path_uses_legacy_scaffold_trace_name() -> None:
+    for path in Path("src").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "write_scaffold_trace" not in text

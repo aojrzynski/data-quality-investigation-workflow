@@ -2,7 +2,7 @@
 
 Data Quality Investigation Workflow is a local-first Python project for investigating known or suspected data quality issues. The goal is to help a human reviewer move from an issue statement, such as "Customer IDs have started duplicating," to a structured investigation record with deterministic evidence, clear open questions, and reviewable artifacts.
 
-This repository is at **PR #4 investigation planning and route selection status**. The current implementation can create an `investigation_case.json`, classify issue statements for planning only, select a planned investigation route, create an `investigation_plan.json` with planned check records marked `planned_not_run`, run without input as a case + plan run, or load a local CSV/XLSX/XLSM dataset and write a safe aggregate `dataset_profile.json` plus an updated `investigation_trace.json`. Case creation, profiling, and planning are foundation steps only; they do not run issue-specific checks, create evidence findings, confirm the reported issue, or identify root cause.
+This repository is at **PR #5 deterministic checks and evidence ledger status**. The current implementation can create an `investigation_case.json`, create `dataset_profile.json` when input is supplied, classify issue statements for planning only, select a planned investigation route, create `investigation_plan.json`, execute a small set of deterministic current-dataset checks when input and issue context are supplied, create `evidence_ledger.json`, record aggregate evidence only, and write an updated `investigation_trace.json`. Case creation, profiling, planning, and evidence recording are foundation steps only; they do not create final findings, prove the issue exists, compare against a baseline, or identify root cause.
 
 ## The problem
 
@@ -44,19 +44,22 @@ What exists now:
 - local CSV/XLSX/XLSM dataset intake;
 - optional Excel sheet selection with `--sheet`;
 - safe aggregate `dataset_profile.json` generation when input is supplied;
-- updated `investigation_trace.json` generation that references case, plan, profile artifacts when available, and concise route metadata;
+- deterministic current-dataset checks for selected planning routes;
+- aggregate-only `evidence_ledger.json` generation when input is supplied;
+- updated `investigation_trace.json` generation that references case, plan, profile, and evidence artifacts when available, plus concise route and evidence metadata;
 - a small synthetic customer example dataset;
 - pytest tests, Ruff checks, and GitHub Actions CI.
 
 What does not exist yet:
 
-- issue-specific deterministic data checks;
-- evidence ledger logic;
-- hypothesis tracking;
+- final findings;
+- `hypothesis_tracker.json`;
+- `investigation_findings.json`;
 - baseline comparison execution;
 - Markdown report generation;
 - proof that the issue exists;
 - root-cause identification;
+- approval, fixing, certification, or trust decisions for a dataset;
 - LangGraph orchestration;
 - OpenAI or other LLM integration.
 
@@ -85,9 +88,17 @@ The profile intentionally does **not** include:
 
 For CSV input, pandas' default null handling is used, so blank cells may be treated as null values. Text columns may include length statistics, but not the text values themselves.
 
+## Evidence ledger
+
+When `--input` is supplied, the CLI writes `evidence_ledger.json`. If an issue statement is supplied, the ledger records deterministic current-dataset evidence items for the selected route. If input is supplied but the issue statement is omitted, the ledger records `not_executed` status and explains that route-specific evidence checks were not executed.
+
+The evidence ledger includes aggregate metrics only, such as column names, row counts, column counts, null counts, duplicate aggregate counts, unique counts, numeric aggregate totals, date ranges, missing daily period counts, inferred kind counts, check status, and signal labels. It does **not** include raw rows, sampled records, example values, top values, distinct value lists, raw failing records, row numbers, duplicated values, category labels, or full category distributions.
+
+PR #5 checks are current-dataset only. Baseline comparison belongs to PR #6, so PR #5 does not claim that nulls increased, totals changed, schemas changed, or category distributions shifted.
+
 ## Why deterministic evidence matters
 
-A data quality investigation should be grounded in checks that can be inspected and repeated. Counts, null rates, duplicate measurements, date ranges, category frequencies, and baseline comparisons are examples of evidence that can be recorded with clear inputs and outputs.
+A data quality investigation should be grounded in checks that can be inspected and repeated. Counts, null rates, duplicate measurements, date ranges, category shape metrics, and baseline comparisons are examples of evidence that can be recorded with clear inputs and outputs.
 
 Deterministic evidence does not remove the need for judgment. It gives reviewers a more stable basis for deciding what to inspect next and for explaining how an investigation reached its current state.
 
@@ -100,64 +111,42 @@ LLMs can be useful for summarizing safe evidence or suggesting follow-up questio
 - do not treat LLM output as authoritative;
 - do not use an LLM to approve, certify, or fix a dataset.
 
-Future LLM support, if added, will be optional and bounded to safe evidence artifacts. Human review remains the final authority.
+Future LLM support, if added, will be optional and bounded to safe evidence artifacts only.
 
-## Why this is a workflow
+## Usage
 
-A suspected data quality issue usually needs multiple steps, not a single answer. The workflow framing is intended to keep each step explicit:
-
-- what issue was reported;
-- what type of issue it appears to be;
-- what checks were planned;
-- what checks were run;
-- what evidence was recorded;
-- which hypotheses changed;
-- what is confirmed, not confirmed, or still unclear;
-- what a human should check next.
-
-PR #4 adds deterministic planning classification, route selection, and an investigation plan artifact. Later PRs will add checks, evidence, hypotheses, findings, and reports one step at a time.
-
-## Quick start
-
-Use Python 3.11 or newer.
+Install locally in editable mode:
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-Run a case + plan command:
+Run case + plan without dataset input. This writes case, plan, and trace artifacts only; no evidence ledger is written because no current dataset is available for checks:
 
 ```bash
 dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/plan_run
 ```
 
-The command writes:
-
-```text
-outputs/plan_run/investigation_case.json
-outputs/plan_run/investigation_plan.json
-outputs/plan_run/investigation_trace.json
-```
-
-Run a CSV case + profile + plan command:
+Run CSV case + profile + plan + evidence:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_plan_profile
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_evidence_run
 ```
 
-The command writes:
+Expected CSV artifacts:
 
 ```text
-outputs/customer_plan_profile/investigation_case.json
-outputs/customer_plan_profile/dataset_profile.json
-outputs/customer_plan_profile/investigation_plan.json
-outputs/customer_plan_profile/investigation_trace.json
+outputs/customer_evidence_run/investigation_case.json
+outputs/customer_evidence_run/dataset_profile.json
+outputs/customer_evidence_run/investigation_plan.json
+outputs/customer_evidence_run/evidence_ledger.json
+outputs/customer_evidence_run/investigation_trace.json
 ```
 
 Equivalent module command:
 
 ```bash
-python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_plan_profile
+python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_evidence_run
 ```
 
 ## Example commands
@@ -174,47 +163,51 @@ Show the package version:
 dq-investigate --version
 ```
 
-Case + plan run without dataset input:
+Case + plan, no evidence:
 
 ```bash
 dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/plan_run
 ```
 
-CSV case + profile + plan:
+CSV case + profile + plan + evidence:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_plan_profile
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_evidence_run
 ```
 
-Excel case + profile + plan:
+Excel case + profile + plan + evidence:
 
 ```bash
-dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_plan_profile
+dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_evidence_run
 ```
 
 ## Output artifacts
 
-Implemented in PR #4:
+Implemented in PR #5:
 
 - `investigation_case.json` — records the issue statement if supplied, deterministic planning classification metadata, selected route, case ID, creation time, workflow status/stage, dataset reference metadata when available, artifact paths, scope boundaries, and authority boundaries.
 - `dataset_profile.json` — safe aggregate dataset metadata and column summaries. Written only when `--input` is provided.
 - `investigation_plan.json` — records the issue statement, planning classification status, deterministic issue type, selected route, planned checks with `planned_not_run` status, required/available/missing inputs, safe candidate columns from column names/profile metadata only, limitations, human review prompts, artifact paths, and authority boundaries.
-- `investigation_trace.json` — records whether the run was planned or dataset-profiled and planned, the issue statement if supplied, concise route metadata, implemented scope, remaining not-yet-implemented workflow pieces, concise profiled dataset metadata when relevant, artifact paths, and authority boundaries.
+- `evidence_ledger.json` — records deterministic current-dataset check execution metadata, aggregate-only evidence items, planned checks not run, safety notes, limitations, artifact paths, and authority boundaries. Written when `--input` is provided.
+- `investigation_trace.json` — records whether the run was planned or evidence-recorded, the issue statement if supplied, concise route metadata, implemented scope, remaining not-yet-implemented workflow pieces, concise profiled dataset metadata when relevant, concise evidence counts when relevant, artifact paths, and authority boundaries.
 
 Planned for future PRs, not implemented yet:
 
-- `evidence_ledger.json`;
 - `hypothesis_tracker.json`;
 - `investigation_findings.json`;
-- `investigation_report.md`.
+- `investigation_report.md`;
+- baseline comparison support.
 
 ## Authority boundary
 
 This project is meant to support human review, not replace it. It must not claim to:
 
-- treat profiling as investigation;
+- treat profiling as final investigation;
 - treat planning classification as evidence, confirmation, or explanation of the reported issue;
-- identify root cause from a case file or profile alone;
+- create final findings in PR #5;
+- compare against a baseline in PR #5;
+- prove the issue exists;
+- identify root cause;
 - fix data;
 - approve, certify, or trust a dataset;
 - decide that a dataset is complete, compliant, production-ready, or ready for downstream use;
@@ -239,8 +232,10 @@ Human review remains the final authority.
 │   └── data_quality_investigation_workflow/
 │       ├── __init__.py
 │       ├── case_file.py
+│       ├── checks.py
 │       ├── cli.py
 │       ├── errors.py
+│       ├── evidence.py
 │       ├── intake.py
 │       ├── issue_classifier.py
 │       ├── planning.py
@@ -257,44 +252,3 @@ Human review remains the final authority.
 ├── README.md
 └── pyproject.toml
 ```
-
-## Run tests
-
-```bash
-python -m compileall src tests
-python -m pytest -q
-python -m ruff check .
-```
-
-The CI workflow runs compile, pytest, and Ruff checks on pull requests and pushes to `main`.
-
-## Limitations and non-goals
-
-For PR #4, this repository intentionally does not include:
-
-- `evidence_ledger.json`;
-- `hypothesis_tracker.json`;
-- `investigation_findings.json`;
-- `investigation_report.md`;
-- issue-specific deterministic checks;
-- evidence findings;
-- evidence ledger execution;
-- hypothesis tracking;
-- baseline/current comparison execution;
-- root-cause identification;
-- LangGraph orchestration;
-- OpenAI or other LLM code;
-- arbitrary generated code execution;
-- database or cloud connectors;
-- committed generated outputs.
-
-The investigation case, dataset profile, and investigation plan are useful foundation artifacts. They are not investigation results and do not confirm whether the reported issue exists.
-
-## Further reading
-
-- [Roadmap](docs/roadmap.md)
-- [Python packaging user guide](https://packaging.python.org/)
-- [pandas documentation](https://pandas.pydata.org/docs/)
-- [openpyxl documentation](https://openpyxl.readthedocs.io/)
-- [pytest documentation](https://docs.pytest.org/)
-- [Ruff documentation](https://docs.astral.sh/ruff/)

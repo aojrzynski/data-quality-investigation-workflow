@@ -43,6 +43,7 @@ def build_investigation_case(
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
     plan_path: Path | None = None,
+    ledger_path: Path | None = None,
     case_id: str | None = None,
     created_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -51,6 +52,7 @@ def build_investigation_case(
     case_path = output_path / CASE_FILENAME
     trace_path = output_path / TRACE_FILENAME
     investigation_plan_path = plan_path or output_path / PLAN_FILENAME
+    evidence_ledger_path = ledger_path
     dataset_profile_path = profile_path
     if loaded_dataset is not None and dataset_profile_path is None:
         dataset_profile_path = output_path / DATASET_PROFILE_FILENAME
@@ -59,6 +61,7 @@ def build_investigation_case(
         "investigation_case": case_path.as_posix(),
         "dataset_profile": dataset_profile_path.as_posix() if dataset_profile_path else None,
         "investigation_plan": investigation_plan_path.as_posix(),
+        "evidence_ledger": evidence_ledger_path.as_posix() if evidence_ledger_path else None,
         "investigation_trace": trace_path.as_posix(),
     }
 
@@ -68,6 +71,9 @@ def build_investigation_case(
     if issue_missing:
         workflow_status = "plan_not_ready"
         workflow_stage = "missing_issue_statement"
+    elif input_provided and evidence_ledger_path is not None:
+        workflow_status = "evidence_recorded"
+        workflow_stage = "deterministic_checks_recorded"
     elif input_provided:
         workflow_status = "profiled_planned"
         workflow_stage = "dataset_profiled_plan_created"
@@ -103,6 +109,7 @@ def write_investigation_case(
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
     plan_path: Path | None = None,
+    ledger_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation case artifact."""
     output_path = Path(output_dir)
@@ -114,6 +121,7 @@ def write_investigation_case(
         loaded_dataset=loaded_dataset,
         profile_path=profile_path,
         plan_path=plan_path,
+        ledger_path=ledger_path,
     )
     case_path.write_text(json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return case_path

@@ -116,6 +116,7 @@ def build_investigation_plan(
     profile_path: Path | None,
     plan_path: Path,
     trace_path: Path,
+    ledger_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an investigation plan without executing planned checks."""
     classification = classify_issue(issue_statement)
@@ -153,6 +154,7 @@ def build_investigation_plan(
             "investigation_case": case_path.as_posix(),
             "dataset_profile": profile_path.as_posix() if profile_path else None,
             "investigation_plan": plan_path.as_posix(),
+            "evidence_ledger": ledger_path.as_posix() if ledger_path else None,
             "investigation_trace": trace_path.as_posix(),
         },
         "authority_boundary": AUTHORITY_BOUNDARY,
@@ -167,6 +169,7 @@ def write_investigation_plan(
     dataset_profile: dict[str, Any] | None = None,
     case_path: Path,
     profile_path: Path | None = None,
+    ledger_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation plan artifact."""
     output_path = Path(output_dir)
@@ -181,6 +184,7 @@ def write_investigation_plan(
         profile_path=profile_path,
         plan_path=plan_path,
         trace_path=trace_path,
+        ledger_path=ledger_path,
     )
     plan_path.write_text(json.dumps(plan, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return plan_path
@@ -194,8 +198,8 @@ def _inputs(profile_path: Path | None, *, issue_provided: bool) -> dict[str, Any
         "dataset_profile_available": profile_path is not None,
         "dataset_profile_artifact": profile_path.as_posix() if profile_path else None,
         "baseline_available": False,
-        "baseline_note": "Baseline comparison is not implemented in PR #4.",
-        "required_inputs": ["issue statement", "current dataset profile", "raw dataset for later checks"],
+        "baseline_note": "Baseline comparison is not implemented in PR #5.",
+        "required_inputs": ["issue statement", "current dataset profile", "current raw dataset for executable PR #5 checks"],
         "available_inputs": [
             input_name
             for input_name, available in [
@@ -243,12 +247,12 @@ def _planned_checks(issue_type: str) -> list[dict[str, Any]]:
             "check_name": check_name,
             "status": "planned_not_run",
             "purpose": purpose,
-            "requires_dataset_profile": True,
-            "requires_raw_dataset": True,
+            "requires_dataset_profile": _requires_dataset_profile(check_id),
+            "requires_raw_dataset": _requires_raw_dataset(check_id, requires_baseline),
             "requires_baseline": requires_baseline,
             "planned_outputs": planned_outputs,
             "not_run_reason": (
-                "PR #4 only creates the investigation plan. Checks will be implemented in a later PR."
+                "The plan records intended checks. PR #5 executes only the supported deterministic current-dataset subset and leaves baseline or review-only checks not run."
             ),
         }
         for check_id, check_name, purpose, planned_outputs, requires_baseline in _CHECKS[issue_type]
@@ -321,3 +325,25 @@ def _issue_tokens(issue_statement: str | None) -> set[str]:
 def route_name_for_issue_type(issue_type: str) -> str:
     """Return the deterministic route name for an issue type."""
     return ROUTE_NAMES[issue_type]
+
+
+def _requires_dataset_profile(check_id: str) -> bool:
+    return check_id in {
+        "planned_current_schema_summary",
+        "planned_general_profile_review",
+    } or not check_id.startswith("planned_reviewer_question")
+
+
+def _requires_raw_dataset(check_id: str, requires_baseline: bool) -> bool:
+    if requires_baseline:
+        return False
+    return check_id in {
+        "planned_duplicate_key_summary",
+        "planned_key_null_summary",
+        "planned_current_null_summary",
+        "planned_date_range_summary",
+        "planned_missing_period_detection",
+        "planned_date_frequency_review",
+        "planned_category_distribution_summary",
+        "planned_numeric_total_summary",
+    }
