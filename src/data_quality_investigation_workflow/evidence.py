@@ -54,6 +54,8 @@ def build_evidence_ledger(
     baseline_comparison: dict[str, Any] | None = None,
     baseline_profile_path: Path | None = None,
     baseline_comparison_path: Path | None = None,
+    hypothesis_tracker_path: Path | None = None,
+    findings_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an aggregate-only evidence ledger payload."""
     issue_provided = bool(classification.get("provided"))
@@ -105,6 +107,8 @@ def build_evidence_ledger(
             trace_path=trace_path,
             baseline_profile_path=baseline_profile_path,
             baseline_comparison_path=baseline_comparison_path,
+            hypothesis_tracker_path=hypothesis_tracker_path,
+            findings_path=findings_path,
         ),
         "authority_boundary": LEDGER_AUTHORITY_BOUNDARY,
     }
@@ -126,6 +130,8 @@ def write_evidence_ledger(
     baseline_comparison: dict[str, Any] | None = None,
     baseline_profile_path: Path | None = None,
     baseline_comparison_path: Path | None = None,
+    hypothesis_tracker_path: Path | None = None,
+    findings_path: Path | None = None,
 ) -> Path:
     """Run route checks and write the aggregate-only evidence ledger artifact."""
     output_path = Path(output_dir)
@@ -157,6 +163,8 @@ def write_evidence_ledger(
         baseline_comparison=baseline_comparison,
         baseline_profile_path=baseline_profile_path,
         baseline_comparison_path=baseline_comparison_path,
+        hypothesis_tracker_path=hypothesis_tracker_path,
+        findings_path=findings_path,
     )
     ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return ledger_path
@@ -171,6 +179,8 @@ def _artifacts(
     trace_path: Path,
     baseline_profile_path: Path | None,
     baseline_comparison_path: Path | None,
+    hypothesis_tracker_path: Path | None = None,
+    findings_path: Path | None = None,
 ) -> dict[str, str]:
     artifacts = {
         "investigation_case": case_path.as_posix(),
@@ -183,4 +193,8 @@ def _artifacts(
         artifacts["baseline_profile"] = baseline_profile_path.as_posix()
     if baseline_comparison_path is not None:
         artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
+    if hypothesis_tracker_path is not None:
+        artifacts["hypothesis_tracker"] = hypothesis_tracker_path.as_posix()
+    if findings_path is not None:
+        artifacts["investigation_findings"] = findings_path.as_posix()
     return artifacts

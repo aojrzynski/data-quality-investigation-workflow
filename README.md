@@ -1,8 +1,10 @@
 # Data Quality Investigation Workflow
 
-Data Quality Investigation Workflow is a local-first Python project for investigating known or suspected data quality issues. The goal is to help a human reviewer move from an issue statement, such as "Customer IDs have started duplicating," to structured, deterministic, aggregate-only investigation artifacts.
+Data Quality Investigation Workflow is a local-first Python project for investigating known or suspected data quality issues. It helps a human reviewer move from an issue statement, such as "Customer IDs have started duplicating," to structured, deterministic, aggregate-only investigation artifacts.
 
-This repository is at **PR #6 baseline comparison support status**. The current implementation can create issue-led case and plan artifacts, profile a current dataset, optionally profile a baseline dataset, compare current vs baseline datasets using safe aggregate signals, execute deterministic current-dataset checks, record route-aware baseline comparison evidence when a baseline is supplied, and write a concise trace. These artifacts support human review; they do **not** create final findings, prove the issue exists, or identify root cause.
+This repository is at **PR #7 hypothesis tracker and findings builder status**. The current implementation can create issue-led case and plan artifacts, profile a current dataset, optionally profile a baseline dataset, compare current vs baseline datasets using safe aggregate signals, execute deterministic current-dataset checks, record route-aware baseline comparison evidence, map evidence IDs into cautious hypotheses, summarize supported/not-supported/unclear signals for human review, and write a concise trace.
+
+The workflow supports human review; it does **not** identify root cause, generate a Markdown report, call an LLM, approve/fix/certify/trust a dataset, make legal/compliance/privacy/governance verdicts, or use database/cloud connectors.
 
 ## The problem
 
@@ -17,107 +19,29 @@ Data quality issues often begin as a short observation:
 
 Those observations need a repeatable investigation path. A reviewer usually needs to know what was checked, what aggregate evidence signals were recorded, what remains unclear, and what a human should inspect next.
 
-## What this project does
+## Why deterministic evidence matters
 
-The intended workflow will eventually:
+The project is deterministic-evidence-first because data quality review often needs reproducible artifacts. The CLI records local, aggregate-only signals such as row counts, null counts, duplicate counts, date-range summaries, schema metadata, and current-vs-baseline comparison counts. It references evidence by ID in later artifacts so reviewers can trace a finding summary back to deterministic checks without exposing raw rows or value lists.
 
-1. capture the issue statement;
-2. classify the issue type for planning;
-3. build an investigation plan;
-4. run deterministic checks relevant to the issue;
-5. record current-dataset and baseline comparison evidence;
-6. update hypotheses;
-7. identify what is confirmed, not confirmed, or still unclear;
-8. optionally use an LLM only over safe evidence to suggest follow-up questions or investigation notes;
-9. write JSON and Markdown artifacts for human review.
+## Why not just ask an LLM?
 
-What exists now:
+An LLM can be useful later for bounded notes, but it should not be the source of evidence. This implementation does not call an LLM. It first creates structured local artifacts from deterministic checks so human reviewers can inspect evidence, limitations, and recommended next checks. Optional bounded LLM notes belong to a later PR and must operate only over safe artifacts.
 
-- package code under `src/data_quality_investigation_workflow`;
-- `dq-investigate` CLI entry point;
-- `--input`, `--sheet`, `--baseline`, `--baseline-sheet`, `--issue`, `--output-dir`, and `--version` CLI options;
-- case + plan runs when `--input` is omitted;
-- `investigation_case.json` generation for issue-led case context;
-- deterministic issue classification for planning only;
-- planned route selection;
-- `investigation_plan.json` generation with baseline availability metadata and planned check executability metadata;
-- local CSV/XLSX/XLSM current dataset intake;
-- local CSV/XLSX/XLSM baseline dataset intake when `--baseline` is supplied;
-- optional Excel sheet selection with `--sheet` and `--baseline-sheet`;
-- safe aggregate `dataset_profile.json` generation when current input is supplied;
-- safe aggregate `baseline_profile.json` generation when baseline input is supplied;
-- safe aggregate `baseline_comparison.json` generation when baseline input is supplied;
-- deterministic current-dataset checks for selected planning routes;
-- route-aware baseline comparison evidence for null, duplicate, date, total, schema, category, and general routes;
-- aggregate-only `evidence_ledger.json` generation when input is supplied;
-- updated `investigation_trace.json` generation with concise dataset, baseline, comparison, route, and evidence metadata;
-- synthetic current and baseline customer example datasets;
-- pytest tests, Ruff checks, and GitHub Actions CI.
+## What this project does now
 
-What does not exist yet:
+Current PR #7 behavior can:
 
-- final findings;
-- `hypothesis_tracker.json`;
-- `investigation_findings.json`;
-- Markdown report generation;
-- proof that the issue exists;
-- root-cause identification;
-- approval, fixing, certification, or trust decisions for a dataset;
-- database or cloud connectors;
-- LangGraph orchestration;
-- OpenAI or other LLM integration.
+- create `investigation_case.json` for issue-led case context;
+- create `dataset_profile.json` when current input is supplied;
+- create `baseline_profile.json` when baseline input is supplied;
+- create `investigation_plan.json` with deterministic route selection and planned checks;
+- create `baseline_comparison.json` when baseline input is supplied;
+- create `evidence_ledger.json` when input is supplied;
+- create `hypothesis_tracker.json` when input and issue are supplied;
+- create `investigation_findings.json` when input and issue are supplied;
+- write an updated `investigation_trace.json` with concise dataset, baseline, evidence, hypothesis, and finding metadata.
 
-## Investigation case file
-
-Every successful run writes `investigation_case.json`. The case file records the issue statement if supplied, concise current dataset reference metadata when available, baseline reference metadata when supplied, artifact paths, current workflow status, current workflow stage, implemented scope, not-yet-implemented workflow capabilities, and authority boundaries.
-
-If `--issue` is omitted, the case file is still written. In that situation, `issue.provided` is `false`, `issue.statement` is `null`, and the file includes a note that later investigation steps will be more useful when an issue statement is supplied.
-
-The case file includes deterministic planning classification metadata, but that classification is only a planning aid. The case file does **not** confirm the issue, identify root cause, approve the data, or include raw rows or value previews.
-
-## Safe aggregate profiling
-
-When `--input` is provided, the CLI loads the current dataset and writes `dataset_profile.json`. When `--baseline` is also provided, the CLI loads the baseline dataset and writes `baseline_profile.json` with the same safe aggregate profile structure.
-
-Profiles contain dataset metadata and aggregate column summaries such as row counts, column counts, null counts, unique counts, duplicate aggregate counts, numeric min/max/mean values, datetime parse/range summaries, and text length summaries.
-
-Profiles intentionally do **not** include:
-
-- raw rows;
-- sampled rows;
-- first or last rows;
-- example values;
-- top values;
-- distinct value lists;
-- duplicated values;
-- raw failing records;
-- value previews.
-
-For CSV input, pandas' default null handling is used, so blank cells may be treated as null values. Text columns may include length statistics, but not the text values themselves.
-
-## Baseline comparison
-
-When `--input` and `--baseline` are both supplied, the CLI writes `baseline_comparison.json`. The comparison artifact records safe aggregate current-vs-baseline signals only, including:
-
-- current and baseline source metadata;
-- row count and column count deltas;
-- schema comparison using column names only;
-- null count and null percentage comparison by matching column names;
-- numeric total comparison by matching numeric columns;
-- date range and missing daily period comparison for date-like columns;
-- category shape comparison without category labels;
-- duplicate aggregate comparison for candidate key columns;
-- safety notes, limitations, artifact references, and authority boundaries.
-
-The baseline comparison does **not** write raw rows, sampled rows, example values, top values, distinct value lists, duplicated values, category labels, full distributions, raw failing records, row numbers, final findings, or root-cause claims.
-
-Date gap comparison currently assumes a daily cadence for aggregate missing-period counts. That assumption is recorded as a limitation in the comparison and evidence artifacts; missing date lists are not written.
-
-## Evidence ledger
-
-When `--input` is supplied, the CLI writes `evidence_ledger.json`. If an issue statement is supplied, the ledger records deterministic current-dataset evidence items for the selected route. If a baseline is supplied, it also records route-aware baseline comparison evidence items where useful. If input is supplied but the issue statement is omitted, the ledger records `not_executed` status and explains that route-specific evidence checks were not executed.
-
-The evidence ledger uses wording such as "signal," "aggregate comparison," and "current vs baseline difference." It does **not** claim that an issue is finally confirmed, does **not** identify root cause, and does **not** create final findings.
+The package code lives under `src/data_quality_investigation_workflow`, and the CLI is available as `dq-investigate` after installation.
 
 ## Example commands
 
@@ -127,42 +51,56 @@ Case + plan, no evidence:
 dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/plan_run
 ```
 
-Current-only evidence:
+Current-only evidence + hypotheses + findings:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_evidence_run
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_findings_run
 ```
 
-Baseline comparison evidence:
+Baseline comparison + hypotheses + findings:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --baseline examples/customer_quality_snapshot_baseline.csv --issue "Nulls increased in the customer email field" --output-dir outputs/baseline_evidence_run
+dq-investigate --input examples/customer_quality_snapshot.csv --baseline examples/customer_quality_snapshot_baseline.csv --issue "Nulls increased in the customer email field" --output-dir outputs/baseline_findings_run
 ```
 
 Excel baseline comparison:
 
 ```bash
-dq-investigate --input path/to/current.xlsx --sheet Current --baseline path/to/baseline.xlsx --baseline-sheet Baseline --issue "The report total dropped unexpectedly" --output-dir outputs/excel_baseline_evidence_run
+dq-investigate --input path/to/current.xlsx --sheet Current --baseline path/to/baseline.xlsx --baseline-sheet Baseline --issue "The report total dropped unexpectedly" --output-dir outputs/excel_findings_run
 ```
 
-## Output artifacts
+## Artifact behavior
 
-Implemented in PR #6:
+- `investigation_case.json` records the issue statement if supplied, concise dataset and baseline references, artifact paths, workflow status/stage, implemented scope, and authority boundaries.
+- `dataset_profile.json` records safe aggregate profile metadata for the current dataset.
+- `baseline_profile.json` records safe aggregate profile metadata for the baseline dataset when supplied.
+- `investigation_plan.json` records deterministic issue classification for planning only, selected route, planned checks, available inputs, and human review prompts.
+- `baseline_comparison.json` records safe aggregate current-vs-baseline comparison signals when a baseline is supplied.
+- `evidence_ledger.json` records deterministic current-dataset evidence and route-aware baseline comparison evidence as aggregate-only evidence items.
+- `hypothesis_tracker.json` maps evidence IDs into a small bounded set of route-specific hypotheses with cautious statuses: `supported_by_evidence`, `not_supported_by_evidence`, `unclear`, or `not_assessed`.
+- `investigation_findings.json` summarizes evidence-supported signals, not-supported signals, unclear items, and recommended human checks. It is a finding summary for review, not a final verdict.
+- `investigation_trace.json` records concise run metadata and artifact paths. For input + issue runs, it includes counts for hypotheses and finding summaries but does not duplicate full evidence, hypotheses, or findings.
 
-- `investigation_case.json` — records the issue statement if supplied, deterministic planning classification metadata, selected route, case ID, creation time, workflow status/stage, current dataset reference metadata, baseline reference metadata when supplied, artifact paths, scope boundaries, and authority boundaries.
-- `dataset_profile.json` — safe aggregate current dataset metadata and column summaries. Written only when `--input` is provided.
-- `baseline_profile.json` — safe aggregate baseline dataset metadata and column summaries. Written only when `--baseline` is provided.
-- `investigation_plan.json` — records the issue statement, planning classification status, deterministic issue type, selected route, planned checks, available/missing inputs, baseline availability, safe candidate columns from column names/profile metadata only, limitations, human review prompts, artifact paths, and authority boundaries.
-- `baseline_comparison.json` — safe aggregate current-vs-baseline comparison metadata. Written only when `--baseline` is provided.
-- `evidence_ledger.json` — records deterministic current-dataset check execution metadata, route-aware baseline comparison evidence when available, aggregate-only evidence items, planned checks not run, safety notes, limitations, artifact paths, and authority boundaries. Written when `--input` is provided.
-- `investigation_trace.json` — records whether the run was planned or evidence-recorded, the issue statement if supplied, concise route metadata, implemented scope, remaining not-yet-implemented workflow pieces, concise current and baseline dataset metadata when relevant, concise comparison/evidence counts when relevant, artifact paths, and authority boundaries.
+Plan-only runs do not write `hypothesis_tracker.json` or `investigation_findings.json`. Runs with input but no issue still write a not-executed `evidence_ledger.json`, but do not write hypothesis or findings artifacts.
 
-Planned for future PRs, not implemented yet:
+## Safe aggregate profiling and evidence
 
-- `hypothesis_tracker.json`;
-- `investigation_findings.json`;
-- `investigation_report.md`;
-- optional LLM-generated investigation notes over safe evidence only.
+Profiles and evidence artifacts intentionally do **not** include:
+
+- raw rows;
+- sampled rows;
+- first or last rows;
+- example values;
+- top values;
+- distinct value lists;
+- duplicated values;
+- raw failing records;
+- category labels;
+- full category distributions;
+- row numbers;
+- value previews.
+
+Column names, aggregate counts, aggregate percentages, evidence IDs, hypothesis IDs, and signal IDs are allowed.
 
 ## Run tests
 
@@ -177,26 +115,19 @@ python -m ruff check .
 
 ## Limitations and non-goals
 
-This project is meant to support human review, not replace it. It must not claim to:
+This project is meant to support human review, not replace it. The implementation still does not:
 
-- treat profiling as final investigation;
-- treat planning classification as evidence, confirmation, or explanation of the reported issue;
-- create final findings in PR #6;
-- create `hypothesis_tracker.json` in PR #6;
-- create `investigation_findings.json` in PR #6;
-- generate a Markdown report in PR #6;
-- call an LLM in PR #6;
-- prove the issue exists;
 - identify root cause;
-- fix data;
-- approve, certify, or trust a dataset;
-- decide that a dataset is complete, compliant, production-ready, or ready for downstream use;
-- use database or cloud connectors;
+- generate `investigation_report.md`;
+- call an LLM;
+- approve, fix, certify, or trust a dataset;
 - make legal, compliance, privacy, or governance verdicts;
+- decide that a dataset is production-ready or ready for downstream use;
+- use database or cloud connectors;
 - write raw rows, sampled rows, example values, top values, distinct value lists, duplicated values, category labels, full distributions, row numbers, or raw failing records to artifacts;
-- send raw rows to an LLM;
+- send raw rows anywhere;
 - execute arbitrary generated code;
-- treat LLM output as authoritative.
+- treat finding summaries as final verdicts.
 
 Human review remains the final authority.
 
@@ -204,7 +135,6 @@ Human review remains the final authority.
 
 ```text
 .
-├── .github/workflows/ci.yml
 ├── docs/
 │   └── roadmap.md
 ├── examples/
@@ -212,13 +142,13 @@ Human review remains the final authority.
 │   └── customer_quality_snapshot_baseline.csv
 ├── src/
 │   └── data_quality_investigation_workflow/
-│       ├── __init__.py
 │       ├── baseline.py
 │       ├── case_file.py
 │       ├── checks.py
 │       ├── cli.py
-│       ├── errors.py
 │       ├── evidence.py
+│       ├── findings.py
+│       ├── hypotheses.py
 │       ├── intake.py
 │       ├── issue_classifier.py
 │       ├── planning.py
@@ -226,11 +156,6 @@ Human review remains the final authority.
 │       ├── trace.py
 │       └── workflow_scope.py
 ├── tests/
-│   ├── test_build_backend.py
-│   ├── test_cli.py
-│   ├── test_intake.py
-│   ├── test_issue_classifier.py
-│   └── test_profiling.py
 ├── LICENSE
 ├── README.md
 └── pyproject.toml

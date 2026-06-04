@@ -48,6 +48,8 @@ def build_investigation_case(
     baseline_dataset: "LoadedDataset" | None = None,
     baseline_profile_path: Path | None = None,
     baseline_comparison_path: Path | None = None,
+    hypothesis_tracker_path: Path | None = None,
+    findings_path: Path | None = None,
     case_id: str | None = None,
     created_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -78,6 +80,10 @@ def build_investigation_case(
         artifacts["baseline_profile"] = baseline_profile_path.as_posix()
     if baseline_comparison_path is not None:
         artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
+    if hypothesis_tracker_path is not None:
+        artifacts["hypothesis_tracker"] = hypothesis_tracker_path.as_posix()
+    if findings_path is not None:
+        artifacts["investigation_findings"] = findings_path.as_posix()
 
     input_provided = loaded_dataset is not None
     classification = classify_issue(issue_statement)
@@ -85,6 +91,9 @@ def build_investigation_case(
     if issue_missing:
         workflow_status = "plan_not_ready"
         workflow_stage = "missing_issue_statement"
+    elif input_provided and evidence_ledger_path is not None and hypothesis_tracker_path is not None and findings_path is not None:
+        workflow_status = "findings_summarized"
+        workflow_stage = "hypotheses_and_findings_created"
     elif input_provided and evidence_ledger_path is not None:
         workflow_status = "evidence_recorded"
         workflow_stage = "deterministic_checks_recorded"
@@ -132,6 +141,8 @@ def write_investigation_case(
     baseline_dataset: "LoadedDataset" | None = None,
     baseline_profile_path: Path | None = None,
     baseline_comparison_path: Path | None = None,
+    hypothesis_tracker_path: Path | None = None,
+    findings_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation case artifact."""
     output_path = Path(output_dir)
@@ -147,6 +158,8 @@ def write_investigation_case(
         baseline_dataset=baseline_dataset,
         baseline_profile_path=baseline_profile_path,
         baseline_comparison_path=baseline_comparison_path,
+        hypothesis_tracker_path=hypothesis_tracker_path,
+        findings_path=findings_path,
     )
     case_path.write_text(json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return case_path
