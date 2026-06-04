@@ -19,8 +19,6 @@ PR #1 through PR #9 built the main workflow:
 - optional bounded LLM notes;
 - concise investigation trace.
 
-PR #10 polished documentation, comments, docstrings, and small maintainability details so the repository reads as current v1 documentation rather than a build diary.
-
 ## Current non-goals
 
 The v1 workflow does not include:
