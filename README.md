@@ -2,7 +2,7 @@
 
 Data Quality Investigation Workflow is a local-first Python project for investigating known or suspected data quality issues. The goal is to help a human reviewer move from an issue statement, such as "Customer IDs have started duplicating," to a structured investigation record with deterministic evidence, clear open questions, and reviewable artifacts.
 
-This repository is at **PR #2 dataset intake and safe profiling status**. The current implementation can run a scaffold-only trace or load a local CSV/XLSX/XLSM dataset and write a safe aggregate `dataset_profile.json` plus an updated `investigation_trace.json`. Profiling is a foundation step only; it does not investigate, confirm, or explain the reported issue.
+This repository is at **PR #3 investigation case file foundation status**. The current implementation can create an `investigation_case.json` with the reported issue and run context, run without input as a case-only/scaffold run, or load a local CSV/XLSX/XLSM dataset and write a safe aggregate `dataset_profile.json` plus an updated `investigation_trace.json`. Case creation and profiling are foundation steps only; they do not investigate, confirm, or explain the reported issue.
 
 ## The problem
 
@@ -36,18 +36,18 @@ What exists now:
 - package code under `src/data_quality_investigation_workflow`;
 - `dq-investigate` CLI entry point;
 - `--input`, `--sheet`, `--issue`, `--output-dir`, and `--version` CLI options;
-- scaffold-only runs when `--input` is omitted;
+- case-only/scaffold runs when `--input` is omitted;
+- `investigation_case.json` generation for issue-led case context;
 - local CSV/XLSX/XLSM dataset intake;
 - optional Excel sheet selection with `--sheet`;
-- safe aggregate `dataset_profile.json` generation;
-- updated `investigation_trace.json` generation;
+- safe aggregate `dataset_profile.json` generation when input is supplied;
+- updated `investigation_trace.json` generation that references the case artifact;
 - a small synthetic customer example dataset;
-- pytest tests and GitHub Actions CI.
+- pytest tests, Ruff checks, and GitHub Actions CI.
 
 What does not exist yet:
 
 - issue classification;
-- investigation case file creation;
 - investigation planning;
 - route selection;
 - issue-specific deterministic data checks;
@@ -57,6 +57,14 @@ What does not exist yet:
 - Markdown report generation;
 - LangGraph orchestration;
 - OpenAI or other LLM integration.
+
+## Investigation case file
+
+Every successful run writes `investigation_case.json`. The case file records the issue statement if supplied, whether an input dataset was supplied, concise dataset reference metadata when available, artifact paths, current workflow status, current workflow stage, not-yet-implemented workflow capabilities, and authority boundaries.
+
+If `--issue` is omitted, the case file is still written. In that situation, `issue.provided` is `false`, `issue.statement` is `null`, and the file includes a note that later investigation steps will be more useful when an issue statement is supplied.
+
+The case file does **not** classify the issue, confirm the issue, identify root cause, approve the data, or include raw rows or value previews.
 
 ## Safe aggregate profiling
 
@@ -105,7 +113,7 @@ A suspected data quality issue usually needs multiple steps, not a single answer
 - what is confirmed, not confirmed, or still unclear;
 - what a human should check next.
 
-PR #2 only adds dataset intake and safe aggregate profiling. Later PRs will add the investigation steps one at a time.
+PR #3 adds the investigation case file foundation. Later PRs will add investigation planning, route selection, checks, evidence, hypotheses, findings, and reports one step at a time.
 
 ## Quick start
 
@@ -115,23 +123,37 @@ Use Python 3.11 or newer.
 python -m pip install -e ".[dev]"
 ```
 
-Run a CSV profile:
+Run a case-only/scaffold command:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_profile
+dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/case_run
 ```
 
 The command writes:
 
 ```text
-outputs/customer_profile/dataset_profile.json
-outputs/customer_profile/investigation_trace.json
+outputs/case_run/investigation_case.json
+outputs/case_run/investigation_trace.json
+```
+
+Run a CSV case + profile command:
+
+```bash
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_case_profile
+```
+
+The command writes:
+
+```text
+outputs/customer_case_profile/investigation_case.json
+outputs/customer_case_profile/dataset_profile.json
+outputs/customer_case_profile/investigation_trace.json
 ```
 
 Equivalent module command:
 
 ```bash
-python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_profile
+python -m data_quality_investigation_workflow.cli --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_case_profile
 ```
 
 ## Example commands
@@ -148,34 +170,34 @@ Show the package version:
 dq-investigate --version
 ```
 
-CSV profile:
+Case-only/scaffold run without dataset input:
 
 ```bash
-dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_profile
+dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/case_run
 ```
 
-Excel profile:
+CSV case + profile:
 
 ```bash
-dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_profile
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --output-dir outputs/customer_case_profile
 ```
 
-Scaffold-only run without dataset input:
+Excel case + profile:
 
 ```bash
-dq-investigate --issue "Customer IDs have started duplicating" --output-dir outputs/scaffold_run
+dq-investigate --input path/to/workbook.xlsx --sheet Sheet1 --issue "Nulls increased in the customer email field" --output-dir outputs/excel_case_profile
 ```
 
 ## Output artifacts
 
-Implemented in PR #2:
+Implemented in PR #3:
 
+- `investigation_case.json` — records the issue statement if supplied, case ID, creation time, workflow status/stage, dataset reference metadata when available, artifact paths, scope boundaries, and authority boundaries.
 - `dataset_profile.json` — safe aggregate dataset metadata and column summaries. Written only when `--input` is provided.
-- `investigation_trace.json` — records whether the run was scaffold-only or dataset-profiled, the issue statement if supplied, implemented scope, remaining not-yet-implemented workflow pieces, profiled dataset metadata when relevant, artifact paths, and authority boundaries.
+- `investigation_trace.json` — records whether the run was case-only or dataset-profiled, the issue statement if supplied, implemented scope, remaining not-yet-implemented workflow pieces, concise profiled dataset metadata when relevant, artifact paths, and authority boundaries.
 
 Planned for future PRs, not implemented yet:
 
-- `investigation_case.json`;
 - `investigation_plan.json`;
 - `evidence_ledger.json`;
 - `hypothesis_tracker.json`;
@@ -187,8 +209,8 @@ Planned for future PRs, not implemented yet:
 This project is meant to support human review, not replace it. It must not claim to:
 
 - treat profiling as investigation;
-- confirm the reported issue from a profile alone;
-- identify root cause from a profile alone;
+- classify, confirm, or explain the reported issue in PR #3;
+- identify root cause from a case file or profile alone;
 - fix data;
 - approve, certify, or trust a dataset;
 - decide that a dataset is complete, compliant, production-ready, or ready for downstream use;
@@ -212,12 +234,14 @@ Human review remains the final authority.
 ├── src/
 │   └── data_quality_investigation_workflow/
 │       ├── __init__.py
+│       ├── case_file.py
 │       ├── cli.py
 │       ├── errors.py
 │       ├── intake.py
 │       ├── profiling.py
 │       └── trace.py
 ├── tests/
+│   ├── test_build_backend.py
 │   ├── test_cli.py
 │   ├── test_intake.py
 │   └── test_profiling.py
@@ -234,14 +258,13 @@ python -m pytest -q
 python -m ruff check .
 ```
 
-The CI workflow runs compile and pytest checks on pull requests and pushes to `main`.
+The CI workflow runs compile, pytest, and Ruff checks on pull requests and pushes to `main`.
 
 ## Limitations and non-goals
 
-For PR #2, this repository intentionally does not include:
+For PR #3, this repository intentionally does not include:
 
 - issue classification;
-- `investigation_case.json`;
 - `investigation_plan.json`;
 - `evidence_ledger.json`;
 - `hypothesis_tracker.json`;
@@ -254,7 +277,7 @@ For PR #2, this repository intentionally does not include:
 - database or cloud connectors;
 - committed generated outputs.
 
-The dataset profile is useful as an aggregate intake artifact. It is not an investigation result and does not confirm whether the reported issue exists.
+The investigation case and dataset profile are useful foundation artifacts. They are not investigation results and do not confirm whether the reported issue exists.
 
 ## Further reading
 

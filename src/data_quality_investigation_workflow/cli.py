@@ -8,13 +8,14 @@ from pathlib import Path
 from typing import Sequence
 
 from data_quality_investigation_workflow import __version__
+from data_quality_investigation_workflow.case_file import write_investigation_case
 from data_quality_investigation_workflow.errors import WorkflowUserError
 from data_quality_investigation_workflow.trace import (
     DATASET_PROFILE_FILENAME,
     write_scaffold_trace,
 )
 
-DEFAULT_OUTPUT_DIR = Path("outputs/scaffold_run")
+DEFAULT_OUTPUT_DIR = Path("outputs/case_run")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--issue",
-        help="Known or suspected data quality issue statement to record in the trace.",
+        help="Known or suspected data quality issue statement to record in the case and trace.",
     )
     parser.add_argument(
         "--output-dir",
@@ -60,11 +61,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.input is None:
-            trace_path = write_scaffold_trace(
+            case_path = write_investigation_case(
                 output_dir=args.output_dir,
                 issue_statement=args.issue,
             )
-            print(f"Scaffold investigation trace written to {trace_path.as_posix()}")
+            trace_path = write_scaffold_trace(
+                output_dir=args.output_dir,
+                issue_statement=args.issue,
+                case_path=case_path,
+            )
+            print(f"Investigation case written to {case_path.as_posix()}")
+            print(f"Investigation trace written to {trace_path.as_posix()}")
             return 0
 
         from data_quality_investigation_workflow.intake import load_dataset
@@ -83,12 +90,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(profile, indent=2, sort_keys=False) + "\n",
             encoding="utf-8",
         )
-        trace_path = write_profiled_trace(
+        case_path = write_investigation_case(
             output_dir=output_dir,
             issue_statement=args.issue,
             loaded_dataset=loaded_dataset,
             profile_path=profile_path,
         )
+        trace_path = write_profiled_trace(
+            output_dir=output_dir,
+            issue_statement=args.issue,
+            loaded_dataset=loaded_dataset,
+            profile_path=profile_path,
+            case_path=case_path,
+        )
+        print(f"Investigation case written to {case_path.as_posix()}")
         print(f"Dataset profile written to {profile_path.as_posix()}")
         print(f"Investigation trace written to {trace_path.as_posix()}")
         return 0
