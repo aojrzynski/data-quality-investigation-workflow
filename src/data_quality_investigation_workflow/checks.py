@@ -41,8 +41,10 @@ def run_route_checks(
     loaded_dataset: LoadedDataset,
     dataset_profile: dict[str, Any],
     investigation_plan: dict[str, Any],
+    *,
+    baseline_comparison: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run the small PR #5 deterministic check set for the selected route."""
+    """Run deterministic current-dataset and optional PR #6 baseline checks."""
     route_name = str(investigation_plan.get("route", {}).get("route_name", ""))
     if route_name == "missing_issue_statement":
         return {
@@ -61,7 +63,11 @@ def run_route_checks(
         "category_shift_investigation": _category_items,
         "general_investigation": _general_items,
     }
-    evidence_items = builders.get(route_name, _general_items)(loaded_dataset, dataset_profile, investigation_plan)
+    evidence_items = builders.get(route_name, _general_items)(
+        loaded_dataset, dataset_profile, investigation_plan
+    )
+    if baseline_comparison is not None:
+        evidence_items.extend(_baseline_items(route_name, baseline_comparison))
     executed = {str(item["check_id"]) for item in evidence_items if item.get("status") == "executed"}
     return {
         "evidence_items": _with_ids(evidence_items),
@@ -143,7 +149,7 @@ def _null_items(loaded_dataset: LoadedDataset, _profile: dict[str, Any], plan: d
         "status": "executed",
         "signal": "present" if total_nulls else "absent",
         "signal_strength": "medium" if total_nulls else "low",
-        "summary": "The current dataset contains null values in assessed columns. PR #5 cannot determine whether nulls increased without a baseline." if total_nulls else "No null values were detected in assessed columns. PR #5 cannot determine whether nulls increased without a baseline.",
+        "summary": "The current dataset contains null values in assessed columns. A baseline is required for current-vs-baseline increase evidence." if total_nulls else "No null values were detected in assessed columns. A baseline is required for current-vs-baseline increase evidence.",
         "related_columns": [name for name in columns if _null_count(loaded_dataset, name) > 0],
         "metrics": {
             "assessed_column_count": len(columns),
@@ -153,7 +159,7 @@ def _null_items(loaded_dataset: LoadedDataset, _profile: dict[str, Any], plan: d
             "total_null_cells": total_nulls,
             "total_cells_assessed": row_count * len(columns),
         },
-        "limitations": _standard_limitations("Baseline comparison is not implemented in PR #5."),
+        "limitations": _standard_limitations("No baseline comparison was supplied for this current-dataset-only evidence item."),
     }]
 
 
@@ -235,10 +241,10 @@ def _total_items(loaded_dataset: LoadedDataset, profile: dict[str, Any], plan: d
             "status": "executed",
             "signal": "present" if totals else "unclear",
             "signal_strength": "low",
-            "summary": "Current numeric totals were summarized. PR #5 cannot determine whether totals changed without a baseline.",
+            "summary": "Current numeric totals were summarized as aggregate signals. A baseline is required for current-vs-baseline total comparison evidence.",
             "related_columns": columns[:5],
             "metrics": metrics,
-            "limitations": _standard_limitations("Baseline comparison is not implemented in PR #5."),
+            "limitations": _standard_limitations("No baseline comparison was supplied for this current-dataset-only evidence item."),
         },
         {
             "check_id": "row_count_summary",
@@ -246,10 +252,10 @@ def _total_items(loaded_dataset: LoadedDataset, profile: dict[str, Any], plan: d
             "status": "executed",
             "signal": "present",
             "signal_strength": "low",
-            "summary": "Current row count was recorded. PR #5 cannot determine whether row count changed without a baseline.",
+            "summary": "Current row count was recorded as an aggregate signal. A baseline is required for current-vs-baseline row count comparison evidence.",
             "related_columns": [],
             "metrics": {"row_count": loaded_dataset.row_count},
-            "limitations": _standard_limitations("Baseline comparison is not implemented in PR #5."),
+            "limitations": _standard_limitations("No baseline comparison was supplied for this current-dataset-only evidence item."),
         },
     ]
 
@@ -263,7 +269,7 @@ def _schema_items(_loaded_dataset: LoadedDataset, profile: dict[str, Any], plan:
         "status": "executed",
         "signal": "present",
         "signal_strength": "low",
-        "summary": "Current schema metadata was summarized. PR #5 cannot determine whether schema changed without a baseline.",
+        "summary": "Current schema metadata was summarized. A baseline is required for current-vs-baseline schema comparison evidence.",
         "related_columns": _candidate_names(plan),
         "metrics": {
             "column_count": int(dataset.get("column_count", 0)),
@@ -272,7 +278,7 @@ def _schema_items(_loaded_dataset: LoadedDataset, profile: dict[str, Any], plan:
             "inferred_kind_counts": dict(sorted(kinds.items())),
             "candidate_column_count": len(_candidate_names(plan)),
         },
-        "limitations": _standard_limitations("Baseline comparison is not implemented in PR #5."),
+        "limitations": _standard_limitations("No baseline comparison was supplied for this current-dataset-only evidence item."),
     }]
 
 
@@ -291,7 +297,7 @@ def _category_items(loaded_dataset: LoadedDataset, profile: dict[str, Any], plan
         "status": "executed",
         "signal": "present" if columns else "unclear",
         "signal_strength": "low",
-        "summary": "Current categorical shape was summarized without category labels. PR #5 cannot determine whether categories shifted without a baseline.",
+        "summary": "Current categorical shape was summarized without category labels. A baseline is required for current-vs-baseline category shape evidence.",
         "related_columns": columns,
         "metrics": {
             "assessed_categorical_column_count": len(columns),
@@ -333,6 +339,177 @@ def _general_items(_loaded_dataset: LoadedDataset, profile: dict[str, Any], _pla
     }]
 
 
+def _baseline_items(route_name: str, comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    builders = {
+        "duplicate_key_investigation": _baseline_duplicate_items,
+        "null_increase_investigation": _baseline_null_items,
+        "date_gap_investigation": _baseline_date_items,
+        "total_change_investigation": _baseline_total_items,
+        "schema_change_investigation": _baseline_schema_items,
+        "category_shift_investigation": _baseline_category_items,
+        "general_investigation": _baseline_general_items,
+    }
+    return builders.get(route_name, _baseline_general_items)(comparison)
+
+
+def _baseline_duplicate_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    duplicate = comparison.get("duplicate_comparison", {})
+    return [{
+        "check_id": "baseline_duplicate_comparison",
+        "check_name": "Baseline duplicate comparison",
+        "status": "executed",
+        "signal": "present" if duplicate.get("columns_with_higher_duplicate_count", 0) else "absent",
+        "signal_strength": "medium" if duplicate.get("columns_with_higher_duplicate_count", 0) else "low",
+        "summary": "Duplicate aggregate comparison signal present; current candidate-key duplicate aggregates are higher than baseline for at least one column." if duplicate.get("columns_with_higher_duplicate_count", 0) else "Duplicate aggregate comparison signal was recorded; current candidate-key duplicate aggregates are not higher than baseline.",
+        "related_columns": _delta_columns(duplicate),
+        "metrics": {
+            "candidate_columns_compared": int(duplicate.get("candidate_columns_compared", 0)),
+            "columns_with_higher_duplicate_count": int(duplicate.get("columns_with_higher_duplicate_count", 0)),
+            "max_duplicate_count_delta": int(duplicate.get("max_duplicate_count_delta", 0)),
+            "column_deltas": duplicate.get("column_deltas", []),
+        },
+        "limitations": _baseline_limitations("Duplicated values are not written."),
+    }]
+
+
+def _baseline_null_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    nulls = comparison.get("null_comparison", {})
+    return [{
+        "check_id": "baseline_null_comparison",
+        "check_name": "Baseline null comparison",
+        "status": "executed",
+        "signal": "present" if nulls.get("columns_with_higher_null_percentage", 0) else "absent",
+        "signal_strength": "medium" if nulls.get("columns_with_higher_null_percentage", 0) else "low",
+        "summary": "Null aggregate comparison signal present; current null percentage is higher than baseline for at least one assessed column." if nulls.get("columns_with_higher_null_percentage", 0) else "Null aggregate comparison signal was recorded; current null percentages are not higher than baseline for assessed columns.",
+        "related_columns": _delta_columns(nulls),
+        "metrics": {
+            "columns_compared": int(nulls.get("columns_compared", 0)),
+            "columns_with_higher_null_percentage": int(nulls.get("columns_with_higher_null_percentage", 0)),
+            "columns_with_lower_null_percentage": int(nulls.get("columns_with_lower_null_percentage", 0)),
+            "max_null_percentage_delta": float(nulls.get("max_null_percentage_delta", 0.0)),
+            "column_deltas": nulls.get("column_deltas", []),
+        },
+        "limitations": _baseline_limitations("This comparison does not claim final issue confirmation."),
+    }]
+
+
+def _baseline_date_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    dates = comparison.get("date_comparison", {})
+    return [{
+        "check_id": "baseline_date_comparison",
+        "check_name": "Baseline date comparison",
+        "status": "executed",
+        "signal": "present" if dates.get("columns_with_missing_daily_period_delta", 0) else "absent",
+        "signal_strength": "medium" if dates.get("columns_with_missing_daily_period_delta", 0) else "low",
+        "summary": "Date aggregate comparison signal was recorded using an explicit daily-cadence assumption.",
+        "related_columns": _delta_columns(dates),
+        "metrics": {
+            "columns_compared": int(dates.get("columns_compared", 0)),
+            "columns_with_range_change": int(dates.get("columns_with_range_change", 0)),
+            "columns_with_missing_daily_period_delta": int(dates.get("columns_with_missing_daily_period_delta", 0)),
+            "daily_cadence_assumption": bool(dates.get("daily_cadence_assumption", True)),
+            "column_deltas": dates.get("column_deltas", []),
+        },
+        "limitations": _baseline_limitations("Daily cadence is assumed; missing date lists are not written."),
+    }]
+
+
+def _baseline_total_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    numeric = comparison.get("numeric_comparison", {})
+    rows = comparison.get("row_count_comparison", {})
+    return [{
+        "check_id": "baseline_total_comparison",
+        "check_name": "Baseline total and row-count comparison",
+        "status": "executed",
+        "signal": "present" if numeric.get("columns_with_total_delta", 0) or rows.get("delta", 0) else "absent",
+        "signal_strength": "medium" if numeric.get("columns_with_total_delta", 0) or rows.get("delta", 0) else "low",
+        "summary": "Numeric and row-count aggregate comparison signal was recorded; this is not a final finding that totals changed.",
+        "related_columns": _delta_columns(numeric),
+        "metrics": {
+            "current_row_count": int(rows.get("current_row_count", 0)),
+            "baseline_row_count": int(rows.get("baseline_row_count", 0)),
+            "row_count_delta": int(rows.get("delta", 0)),
+            "numeric_columns_compared": int(numeric.get("columns_compared", 0)),
+            "columns_with_total_delta": int(numeric.get("columns_with_total_delta", 0)),
+            "max_absolute_total_delta": float(numeric.get("max_absolute_total_delta", 0.0)),
+            "column_deltas": numeric.get("column_deltas", []),
+        },
+        "limitations": _baseline_limitations("Numeric totals are aggregate sums only."),
+    }]
+
+
+def _baseline_schema_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    schema = comparison.get("schema_comparison", {})
+    return [{
+        "check_id": "baseline_schema_comparison",
+        "check_name": "Baseline schema comparison",
+        "status": "executed",
+        "signal": "present" if schema.get("added_columns") or schema.get("removed_columns") or schema.get("inferred_kind_change_count", 0) else "absent",
+        "signal_strength": "medium" if schema.get("added_columns") or schema.get("removed_columns") else "low",
+        "summary": "Schema aggregate comparison signal was recorded using column names and inferred-kind metadata only.",
+        "related_columns": list(schema.get("added_columns", [])) + list(schema.get("removed_columns", [])),
+        "metrics": {
+            "current_column_count": int(schema.get("current_column_count", 0)),
+            "baseline_column_count": int(schema.get("baseline_column_count", 0)),
+            "added_columns": schema.get("added_columns", []),
+            "removed_columns": schema.get("removed_columns", []),
+            "shared_column_count": int(schema.get("shared_column_count", 0)),
+            "inferred_kind_change_count": int(schema.get("inferred_kind_change_count", 0)),
+            "inferred_kind_changes": schema.get("inferred_kind_changes", []),
+        },
+        "limitations": _baseline_limitations("Schema comparison does not claim root cause."),
+    }]
+
+
+def _baseline_category_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    category = comparison.get("category_shape_comparison", {})
+    return [{
+        "check_id": "baseline_category_shape_comparison",
+        "check_name": "Baseline category shape comparison",
+        "status": "executed",
+        "signal": "present" if category.get("columns_with_unique_count_delta", 0) else "absent",
+        "signal_strength": "medium" if category.get("columns_with_unique_count_delta", 0) else "low",
+        "summary": "Category shape aggregate comparison signal was recorded without category labels or distributions.",
+        "related_columns": _delta_columns(category),
+        "metrics": {
+            "columns_compared": int(category.get("columns_compared", 0)),
+            "columns_with_unique_count_delta": int(category.get("columns_with_unique_count_delta", 0)),
+            "max_unique_count_delta": int(category.get("max_unique_count_delta", 0)),
+            "columns_with_high_cardinality_signal_delta": int(category.get("columns_with_high_cardinality_signal_delta", 0)),
+            "column_deltas": category.get("column_deltas", []),
+        },
+        "limitations": _baseline_limitations("Category labels and full category distributions are not written."),
+    }]
+
+
+def _baseline_general_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    general = comparison.get("general_summary", {})
+    return [{
+        "check_id": "baseline_general_summary",
+        "check_name": "Baseline general comparison summary",
+        "status": "executed",
+        "signal": "present",
+        "signal_strength": "low",
+        "summary": "General current vs baseline aggregate comparison signal was recorded and requires human review.",
+        "related_columns": [],
+        "metrics": general,
+        "limitations": _baseline_limitations("General comparison is not route-specific final evidence."),
+    }]
+
+
+def _delta_columns(section: dict[str, Any]) -> list[str]:
+    return [str(delta.get("column_name")) for delta in section.get("column_deltas", []) if delta.get("column_name")]
+
+
+def _baseline_limitations(extra: str) -> list[str]:
+    return [
+        extra,
+        "Baseline comparison signal is not final evidence of root cause.",
+        "Human review remains required.",
+        "Raw rows, sampled records, value lists, category labels, and raw failing records are not written to the artifact.",
+    ]
+
+
 def _checks_not_run(plan: dict[str, Any], executed: set[str]) -> list[dict[str, str]]:
     not_run = []
     for check in plan.get("planned_checks", []):
@@ -341,9 +518,9 @@ def _checks_not_run(plan: dict[str, Any], executed: set[str]) -> list[dict[str, 
         if executed_id in executed:
             continue
         if check.get("requires_baseline"):
-            reason = "Baseline comparison is not implemented in PR #5."
+            reason = "Baseline comparison was not available or not route-executable in this run."
         else:
-            reason = "This planned review requires later evidence interpretation and is not implemented in PR #5."
+            reason = "This planned review requires later evidence interpretation and is not implemented in the current run."
         not_run.append({"check_id": planned_id, "reason": reason})
     return not_run
 
@@ -401,6 +578,7 @@ def _standard_limitations(extra: str) -> list[str]:
         extra,
         "Raw rows, sampled records, value lists, and raw failing records are not written to the artifact.",
         "This check does not identify root cause.",
+        "Human review remains required before interpreting this signal.",
     ]
 
 

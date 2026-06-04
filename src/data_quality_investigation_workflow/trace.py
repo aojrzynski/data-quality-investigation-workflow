@@ -32,6 +32,10 @@ def build_investigation_trace(
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
     ledger_path: Path | None = None,
+    baseline_dataset: "LoadedDataset" | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
+    baseline_comparison_metadata: dict[str, Any] | None = None,
     evidence_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an investigation trace payload with concise route and evidence metadata."""
@@ -66,13 +70,15 @@ def build_investigation_trace(
         },
         "implemented_scope": IMPLEMENTED_SCOPE,
         "not_yet_implemented": NOT_YET_IMPLEMENTED,
-        "artifacts": {
-            "investigation_case": case_path.as_posix(),
-            "dataset_profile": profile_path.as_posix() if profile_path else None,
-            "investigation_plan": plan_path.as_posix(),
-            "evidence_ledger": ledger_path.as_posix() if ledger_path else None,
-            "investigation_trace": trace_path.as_posix(),
-        },
+        "artifacts": _artifacts(
+            case_path=case_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            ledger_path=ledger_path,
+            trace_path=trace_path,
+            baseline_profile_path=baseline_profile_path,
+            baseline_comparison_path=baseline_comparison_path,
+        ),
         "authority_boundary": AUTHORITY_BOUNDARY,
     }
     if loaded_dataset is not None:
@@ -82,6 +88,37 @@ def build_investigation_trace(
             "sheet_name": loaded_dataset.sheet_name,
             "row_count": loaded_dataset.row_count,
             "column_count": loaded_dataset.column_count,
+        }
+    if baseline_dataset is not None:
+        payload["baseline"] = {
+            "available": True,
+            "file_name": baseline_dataset.file_name,
+            "file_extension": baseline_dataset.file_extension,
+            "sheet_name": baseline_dataset.sheet_name,
+            "row_count": baseline_dataset.row_count,
+            "column_count": baseline_dataset.column_count,
+            "baseline_profile_artifact": (
+                baseline_profile_path.as_posix() if baseline_profile_path else None
+            ),
+            "baseline_comparison_artifact": (
+                baseline_comparison_path.as_posix() if baseline_comparison_path else None
+            ),
+        }
+    else:
+        payload["baseline"] = {
+            "available": False,
+            "baseline_profile_artifact": None,
+            "baseline_comparison_artifact": None,
+        }
+    if baseline_comparison_metadata is not None:
+        payload["baseline_comparison"] = {
+            "available": True,
+            "comparison_signal_count": int(
+                baseline_comparison_metadata.get("comparison_signal_count", 0)
+            ),
+            "compared_column_count": int(
+                baseline_comparison_metadata.get("compared_column_count", 0)
+            ),
         }
     if evidence_metadata is not None:
         payload["evidence"] = {
@@ -124,6 +161,10 @@ def write_investigation_trace(
     loaded_dataset: "LoadedDataset" | None = None,
     profile_path: Path | None = None,
     ledger_path: Path | None = None,
+    baseline_dataset: "LoadedDataset" | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
+    baseline_comparison_metadata: dict[str, Any] | None = None,
     evidence_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Create the output directory and write the investigation trace JSON artifact."""
@@ -140,6 +181,10 @@ def write_investigation_trace(
         profile_path=profile_path,
         ledger_path=ledger_path,
         evidence_metadata=evidence_metadata,
+        baseline_dataset=baseline_dataset,
+        baseline_profile_path=baseline_profile_path,
+        baseline_comparison_path=baseline_comparison_path,
+        baseline_comparison_metadata=baseline_comparison_metadata,
     )
     _write_json(trace_path, trace)
     return trace_path
@@ -167,3 +212,27 @@ def write_profiled_trace(
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+
+
+def _artifacts(
+    *,
+    case_path: Path,
+    profile_path: Path | None,
+    plan_path: Path,
+    ledger_path: Path | None,
+    trace_path: Path,
+    baseline_profile_path: Path | None,
+    baseline_comparison_path: Path | None,
+) -> dict[str, str | None]:
+    artifacts = {
+        "investigation_case": case_path.as_posix(),
+        "dataset_profile": profile_path.as_posix() if profile_path else None,
+        "investigation_plan": plan_path.as_posix(),
+        "evidence_ledger": ledger_path.as_posix() if ledger_path else None,
+        "investigation_trace": trace_path.as_posix(),
+    }
+    if baseline_profile_path is not None:
+        artifacts["baseline_profile"] = baseline_profile_path.as_posix()
+    if baseline_comparison_path is not None:
+        artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
+    return artifacts
