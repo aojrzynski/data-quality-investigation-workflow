@@ -14,11 +14,11 @@ IMPLEMENTED_SCOPE = [
     "planned route selection",
     "deterministic current-dataset issue checks",
     "aggregate-only evidence ledger",
+    "safe aggregate baseline comparison",
 ]
 
 NOT_YET_IMPLEMENTED = [
     "hypothesis tracking",
-    "baseline comparison",
     "Markdown investigation report",
     "optional LLM notes",
     "final findings artifact",

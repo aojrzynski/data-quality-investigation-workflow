@@ -8,11 +8,18 @@ from pathlib import Path
 from typing import Sequence
 
 from data_quality_investigation_workflow import __version__
+from data_quality_investigation_workflow.baseline import (
+    BASELINE_COMPARISON_FILENAME,
+    BASELINE_PROFILE_FILENAME,
+    write_baseline_comparison,
+)
 from data_quality_investigation_workflow.case_file import write_investigation_case
-from data_quality_investigation_workflow.planning import PLAN_FILENAME, write_investigation_plan
 from data_quality_investigation_workflow.evidence import LEDGER_FILENAME, write_evidence_ledger
-from data_quality_investigation_workflow.errors import WorkflowUserError
+from data_quality_investigation_workflow.errors import DatasetIntakeError, WorkflowUserError
+from data_quality_investigation_workflow.intake import EXCEL_EXTENSIONS, load_dataset
 from data_quality_investigation_workflow.issue_classifier import classify_issue
+from data_quality_investigation_workflow.planning import PLAN_FILENAME, write_investigation_plan
+from data_quality_investigation_workflow.profiling import build_dataset_profile
 from data_quality_investigation_workflow.trace import (
     DATASET_PROFILE_FILENAME,
     TRACE_FILENAME,
@@ -27,8 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dq-investigate",
         description=(
-            "Record an issue-led data quality workflow trace. Optionally load a "
-            "local CSV/XLSX/XLSM dataset and write a safe aggregate profile."
+            "Record an issue-led data quality workflow trace. Optionally load "
+            "local CSV/XLSX/XLSM current and baseline datasets and write safe "
+            "aggregate evidence artifacts."
         ),
     )
     parser.add_argument(
@@ -39,11 +47,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--input",
         type=Path,
-        help="Optional local CSV, XLSX, or XLSM dataset to profile.",
+        help="Optional local CSV, XLSX, or XLSM current dataset to profile.",
     )
     parser.add_argument(
         "--sheet",
         help="Worksheet name for Excel input. Not valid for CSV input.",
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="Optional local CSV, XLSX, or XLSM baseline dataset to compare.",
+    )
+    parser.add_argument(
+        "--baseline-sheet",
+        help="Worksheet name for Excel baseline input. Not valid for CSV baseline input.",
     )
     parser.add_argument(
         "--issue",
@@ -64,114 +81,192 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        _validate_baseline_args(args)
         if args.input is None:
-            output_dir = Path(args.output_dir)
-            plan_path = output_dir / PLAN_FILENAME
-            case_path = write_investigation_case(
-                output_dir=output_dir,
-                issue_statement=args.issue,
-                plan_path=plan_path,
-            )
-            plan_path = write_investigation_plan(
-                output_dir=output_dir,
-                issue_statement=args.issue,
-                case_path=case_path,
-            )
-            trace_path = write_investigation_trace(
-                output_dir=output_dir,
-                issue_statement=args.issue,
-                case_path=case_path,
-                plan_path=plan_path,
-            )
-            print(f"Investigation case written to {case_path.as_posix()}")
-            print(f"Investigation plan written to {plan_path.as_posix()}")
-            print(f"Investigation trace written to {trace_path.as_posix()}")
+            _run_plan_only(args)
             return 0
 
-        from data_quality_investigation_workflow.intake import load_dataset
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        profile_path = output_dir / DATASET_PROFILE_FILENAME
-        plan_path = output_dir / PLAN_FILENAME
-        trace_path = output_dir / TRACE_FILENAME
-        ledger_path = output_dir / LEDGER_FILENAME
-
-        loaded_dataset = load_dataset(args.input, sheet=args.sheet)
-        classification = classify_issue(args.issue)
-
-        from data_quality_investigation_workflow.profiling import build_dataset_profile
-
-        profile = build_dataset_profile(loaded_dataset)
-        profile_path.write_text(
-            json.dumps(profile, indent=2, sort_keys=False) + "\n",
-            encoding="utf-8",
-        )
-        case_path = write_investigation_case(
-            output_dir=output_dir,
-            issue_statement=args.issue,
-            loaded_dataset=loaded_dataset,
-            profile_path=profile_path,
-            plan_path=plan_path,
-            ledger_path=ledger_path,
-        )
-        plan_path = write_investigation_plan(
-            output_dir=output_dir,
-            issue_statement=args.issue,
-            loaded_dataset=loaded_dataset,
-            dataset_profile=profile,
-            case_path=case_path,
-            profile_path=profile_path,
-            ledger_path=ledger_path,
-        )
-        investigation_plan = json.loads(plan_path.read_text(encoding="utf-8"))
-        ledger_path = write_evidence_ledger(
-            output_dir=output_dir,
-            issue_statement=args.issue,
-            classification=classification,
-            route_name=classification["selected_route"],
-            loaded_dataset=loaded_dataset,
-            dataset_profile=profile,
-            investigation_plan=investigation_plan,
-            case_path=case_path,
-            profile_path=profile_path,
-            plan_path=plan_path,
-            trace_path=trace_path,
-        )
-        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-        trace_path = write_investigation_trace(
-            output_dir=output_dir,
-            issue_statement=args.issue,
-            loaded_dataset=loaded_dataset,
-            profile_path=profile_path,
-            case_path=case_path,
-            plan_path=plan_path,
-            ledger_path=ledger_path,
-            evidence_metadata={
-                "checks_executed_count": ledger["execution"]["checks_executed_count"],
-                "evidence_item_count": ledger["execution"]["evidence_item_count"],
-                "checks_not_run_count": ledger["execution"]["checks_not_run_count"],
-            },
-        )
-        print(f"Investigation case written to {case_path.as_posix()}")
-        print(f"Dataset profile written to {profile_path.as_posix()}")
-        print(f"Investigation plan written to {plan_path.as_posix()}")
-        print(f"Evidence ledger written to {ledger_path.as_posix()}")
-        print(f"Investigation trace written to {trace_path.as_posix()}")
+        _run_dataset_workflow(args)
         return 0
     except WorkflowUserError as error:
         parser.exit(status=2, message=f"Error: {error}\n")
-    except ModuleNotFoundError as error:
-        missing_dependency = error.name or "required dependency"
-        if missing_dependency in {"pandas", "openpyxl"}:
-            parser.exit(
-                status=2,
-                message=(
-                    f"Error: Missing required dependency {missing_dependency!r}. "
-                    "Install the package with runtime dependencies before profiling datasets.\n"
-                ),
+
+
+def _validate_baseline_args(args: argparse.Namespace) -> None:
+    if args.baseline is not None and args.input is None:
+        raise WorkflowUserError("--baseline requires --input for the current dataset.")
+    if args.baseline_sheet is not None and args.baseline is None:
+        raise WorkflowUserError("--baseline-sheet can only be used when --baseline is supplied.")
+    if args.baseline is not None and args.baseline.suffix.lower() not in EXCEL_EXTENSIONS:
+        if args.baseline_sheet is not None:
+            raise WorkflowUserError(
+                "--baseline-sheet can only be used with Excel baseline files, not CSV input."
             )
-        raise
 
 
-if __name__ == "__main__":
+def _run_plan_only(args: argparse.Namespace) -> None:
+    output_dir = Path(args.output_dir)
+    plan_path = output_dir / PLAN_FILENAME
+    case_path = write_investigation_case(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        plan_path=plan_path,
+    )
+    plan_path = write_investigation_plan(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        case_path=case_path,
+    )
+    trace_path = write_investigation_trace(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        case_path=case_path,
+        plan_path=plan_path,
+    )
+    print(f"Investigation case written to {case_path.as_posix()}")
+    print(f"Investigation plan written to {plan_path.as_posix()}")
+    print(f"Investigation trace written to {trace_path.as_posix()}")
+
+
+def _run_dataset_workflow(args: argparse.Namespace) -> None:
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    profile_path = output_dir / DATASET_PROFILE_FILENAME
+    baseline_profile_path = output_dir / BASELINE_PROFILE_FILENAME
+    baseline_comparison_path = output_dir / BASELINE_COMPARISON_FILENAME
+    plan_path = output_dir / PLAN_FILENAME
+    trace_path = output_dir / TRACE_FILENAME
+    ledger_path = output_dir / LEDGER_FILENAME
+
+    loaded_dataset = load_dataset(args.input, sheet=args.sheet)
+    classification = classify_issue(args.issue)
+    profile = build_dataset_profile(loaded_dataset)
+    _write_json(profile_path, profile)
+
+    baseline_dataset = None
+    baseline_profile = None
+    baseline_comparison = None
+    if args.baseline is not None:
+        baseline_dataset = _load_baseline_dataset(args.baseline, args.baseline_sheet)
+        baseline_profile = build_dataset_profile(baseline_dataset)
+        baseline_profile["artifact_type"] = "baseline_profile"
+        _write_json(baseline_profile_path, baseline_profile)
+        baseline_comparison = _build_and_write_baseline_comparison(
+            output_dir=output_dir,
+            loaded_dataset=loaded_dataset,
+            baseline_dataset=baseline_dataset,
+            profile=profile,
+            baseline_profile=baseline_profile,
+            profile_path=profile_path,
+            baseline_profile_path=baseline_profile_path,
+        )
+
+    case_path = write_investigation_case(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        loaded_dataset=loaded_dataset,
+        profile_path=profile_path,
+        plan_path=plan_path,
+        ledger_path=ledger_path,
+        baseline_dataset=baseline_dataset,
+        baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+        baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+    )
+    plan_path = write_investigation_plan(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        loaded_dataset=loaded_dataset,
+        dataset_profile=profile,
+        case_path=case_path,
+        profile_path=profile_path,
+        ledger_path=ledger_path,
+        baseline_dataset=baseline_dataset,
+        baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+        baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+    )
+    investigation_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    ledger_path = write_evidence_ledger(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        classification=classification,
+        route_name=classification["selected_route"],
+        loaded_dataset=loaded_dataset,
+        dataset_profile=profile,
+        investigation_plan=investigation_plan,
+        case_path=case_path,
+        profile_path=profile_path,
+        plan_path=plan_path,
+        trace_path=trace_path,
+        baseline_comparison=baseline_comparison,
+        baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+        baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+    )
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    trace_path = write_investigation_trace(
+        output_dir=output_dir,
+        issue_statement=args.issue,
+        loaded_dataset=loaded_dataset,
+        profile_path=profile_path,
+        case_path=case_path,
+        plan_path=plan_path,
+        ledger_path=ledger_path,
+        baseline_dataset=baseline_dataset,
+        baseline_profile_path=baseline_profile_path if baseline_dataset else None,
+        baseline_comparison_path=baseline_comparison_path if baseline_dataset else None,
+        baseline_comparison_metadata=baseline_comparison,
+        evidence_metadata={
+            "checks_executed_count": ledger["execution"]["checks_executed_count"],
+            "evidence_item_count": ledger["execution"]["evidence_item_count"],
+            "checks_not_run_count": ledger["execution"]["checks_not_run_count"],
+        },
+    )
+    print(f"Investigation case written to {case_path.as_posix()}")
+    print(f"Dataset profile written to {profile_path.as_posix()}")
+    if baseline_dataset is not None:
+        print(f"Baseline profile written to {baseline_profile_path.as_posix()}")
+    print(f"Investigation plan written to {plan_path.as_posix()}")
+    if baseline_dataset is not None:
+        print(f"Baseline comparison written to {baseline_comparison_path.as_posix()}")
+    print(f"Evidence ledger written to {ledger_path.as_posix()}")
+    print(f"Investigation trace written to {trace_path.as_posix()}")
+
+
+def _load_baseline_dataset(path: Path, sheet: str | None):
+    try:
+        return load_dataset(path, sheet=sheet)
+    except DatasetIntakeError as error:
+        message = str(error)
+        message = message.replace("Input file", "Baseline file")
+        message = message.replace("Provide --sheet", "Provide --baseline-sheet")
+        message = message.replace("--sheet can only", "--baseline-sheet can only")
+        raise DatasetIntakeError(message) from error
+
+
+def _build_and_write_baseline_comparison(
+    *,
+    output_dir: Path,
+    loaded_dataset,
+    baseline_dataset,
+    profile: dict[str, object],
+    baseline_profile: dict[str, object],
+    profile_path: Path,
+    baseline_profile_path: Path,
+) -> dict[str, object]:
+    comparison_path = write_baseline_comparison(
+        output_dir=output_dir,
+        current_dataset=loaded_dataset,
+        baseline_dataset=baseline_dataset,
+        current_profile=profile,
+        baseline_profile=baseline_profile,
+        dataset_profile_path=profile_path,
+        baseline_profile_path=baseline_profile_path,
+    )
+    return json.loads(comparison_path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+
+
+if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())

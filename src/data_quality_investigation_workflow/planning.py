@@ -117,6 +117,9 @@ def build_investigation_plan(
     plan_path: Path,
     trace_path: Path,
     ledger_path: Path | None = None,
+    baseline_dataset: "LoadedDataset" | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an investigation plan without executing planned checks."""
     classification = classify_issue(issue_statement)
@@ -140,23 +143,31 @@ def build_investigation_plan(
             "route_status": "planned" if classification["provided"] else "not_ready",
             "route_reason": ROUTE_REASONS[issue_type],
         },
-        "inputs": _inputs(profile_path, issue_provided=classification["provided"]),
+        "inputs": _inputs(
+            profile_path,
+            issue_provided=classification["provided"],
+            baseline_dataset=baseline_dataset,
+            baseline_profile_path=baseline_profile_path,
+            baseline_comparison_path=baseline_comparison_path,
+        ),
         "dataset_context": _dataset_context(
             loaded_dataset=loaded_dataset,
             dataset_profile=dataset_profile,
             issue_statement=issue_statement,
             issue_type=issue_type,
         ),
-        "planned_checks": _planned_checks(issue_type),
+        "planned_checks": _planned_checks(issue_type, baseline_available=baseline_dataset is not None),
         "human_review_prompts": _PROMPTS[issue_type],
         "limitations": PLAN_LIMITATIONS,
-        "artifacts": {
-            "investigation_case": case_path.as_posix(),
-            "dataset_profile": profile_path.as_posix() if profile_path else None,
-            "investigation_plan": plan_path.as_posix(),
-            "evidence_ledger": ledger_path.as_posix() if ledger_path else None,
-            "investigation_trace": trace_path.as_posix(),
-        },
+        "artifacts": _artifacts(
+            case_path=case_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            ledger_path=ledger_path,
+            trace_path=trace_path,
+            baseline_profile_path=baseline_profile_path,
+            baseline_comparison_path=baseline_comparison_path,
+        ),
         "authority_boundary": AUTHORITY_BOUNDARY,
     }
 
@@ -170,6 +181,9 @@ def write_investigation_plan(
     case_path: Path,
     profile_path: Path | None = None,
     ledger_path: Path | None = None,
+    baseline_dataset: "LoadedDataset" | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation plan artifact."""
     output_path = Path(output_dir)
@@ -185,26 +199,55 @@ def write_investigation_plan(
         plan_path=plan_path,
         trace_path=trace_path,
         ledger_path=ledger_path,
+        baseline_dataset=baseline_dataset,
+        baseline_profile_path=baseline_profile_path,
+        baseline_comparison_path=baseline_comparison_path,
     )
     plan_path.write_text(json.dumps(plan, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return plan_path
 
 
-def _inputs(profile_path: Path | None, *, issue_provided: bool) -> dict[str, Any]:
-    missing_inputs = ["baseline dataset or prior-run artifact"]
+def _inputs(
+    profile_path: Path | None,
+    *,
+    issue_provided: bool,
+    baseline_dataset: "LoadedDataset" | None,
+    baseline_profile_path: Path | None,
+    baseline_comparison_path: Path | None,
+) -> dict[str, Any]:
+    baseline_available = baseline_dataset is not None
+    missing_inputs = []
     if not issue_provided:
-        missing_inputs.insert(0, "issue statement")
+        missing_inputs.append("issue statement")
+    if not baseline_available:
+        missing_inputs.append("baseline dataset or prior-run artifact")
     return {
         "dataset_profile_available": profile_path is not None,
         "dataset_profile_artifact": profile_path.as_posix() if profile_path else None,
-        "baseline_available": False,
-        "baseline_note": "Baseline comparison is not implemented in PR #5.",
-        "required_inputs": ["issue statement", "current dataset profile", "current raw dataset for executable PR #5 checks"],
+        "baseline_available": baseline_available,
+        "baseline_profile_artifact": (
+            baseline_profile_path.as_posix() if baseline_profile_path else None
+        ),
+        "baseline_comparison_artifact": (
+            baseline_comparison_path.as_posix() if baseline_comparison_path else None
+        ),
+        "baseline_note": (
+            "Baseline comparison aggregate evidence is executable in PR #6."
+            if baseline_available
+            else "No baseline was supplied for this run."
+        ),
+        "required_inputs": [
+            "issue statement",
+            "current dataset profile",
+            "current raw dataset for executable deterministic checks",
+            "baseline dataset for executable PR #6 baseline comparisons",
+        ],
         "available_inputs": [
             input_name
             for input_name, available in [
                 ("issue statement", issue_provided),
                 ("current dataset profile", profile_path is not None),
+                ("baseline dataset", baseline_available),
             ]
             if available
         ],
@@ -238,7 +281,7 @@ def _dataset_context(
     }
 
 
-def _planned_checks(issue_type: str) -> list[dict[str, Any]]:
+def _planned_checks(issue_type: str, *, baseline_available: bool) -> list[dict[str, Any]]:
     if issue_type == "missing_issue_statement":
         return []
     return [
@@ -251,8 +294,15 @@ def _planned_checks(issue_type: str) -> list[dict[str, Any]]:
             "requires_raw_dataset": _requires_raw_dataset(check_id, requires_baseline),
             "requires_baseline": requires_baseline,
             "planned_outputs": planned_outputs,
+            "executable_in_current_run": (
+                not requires_baseline or baseline_available
+            ),
+            "execution_stage": (
+                "pr6_baseline_comparison" if requires_baseline else "pr5_current_dataset_checks"
+            ),
+            "requires_later_interpretation": True,
             "not_run_reason": (
-                "The plan records intended checks. PR #5 executes only the supported deterministic current-dataset subset and leaves baseline or review-only checks not run."
+                "The plan records intended checks. PR #6 can record aggregate baseline comparison signals when baseline is supplied, but interpretation remains human-review-led."
             ),
         }
         for check_id, check_name, purpose, planned_outputs, requires_baseline in _CHECKS[issue_type]
@@ -347,3 +397,27 @@ def _requires_raw_dataset(check_id: str, requires_baseline: bool) -> bool:
         "planned_category_distribution_summary",
         "planned_numeric_total_summary",
     }
+
+
+def _artifacts(
+    *,
+    case_path: Path,
+    profile_path: Path | None,
+    plan_path: Path,
+    ledger_path: Path | None,
+    trace_path: Path,
+    baseline_profile_path: Path | None,
+    baseline_comparison_path: Path | None,
+) -> dict[str, str | None]:
+    artifacts = {
+        "investigation_case": case_path.as_posix(),
+        "dataset_profile": profile_path.as_posix() if profile_path else None,
+        "investigation_plan": plan_path.as_posix(),
+        "evidence_ledger": ledger_path.as_posix() if ledger_path else None,
+        "investigation_trace": trace_path.as_posix(),
+    }
+    if baseline_profile_path is not None:
+        artifacts["baseline_profile"] = baseline_profile_path.as_posix()
+    if baseline_comparison_path is not None:
+        artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
+    return artifacts

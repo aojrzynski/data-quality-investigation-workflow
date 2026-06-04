@@ -25,6 +25,7 @@ FORBIDDEN_KEYS = {
     "row_numbers",
     "duplicated_values",
     "category_labels",
+    "full_distribution",
 }
 
 
@@ -470,7 +471,7 @@ def test_null_issue_evidence_is_current_only(tmp_path: Path) -> None:
     assert ledger["issue"]["selected_route"] == "null_increase_investigation"
     item = ledger["evidence_items"][0]
     assert item["check_id"] == "current_null_summary"
-    assert "cannot determine whether nulls increased without a baseline" in item["summary"]
+    assert "baseline is required for current-vs-baseline increase evidence" in item["summary"]
     assert item["metrics"]["total_null_cells"] >= 1
     assert "baseline_delta" not in json.dumps(item)
 
@@ -593,3 +594,288 @@ def test_no_code_path_uses_legacy_scaffold_trace_name() -> None:
     for path in Path("src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         assert "write_scaffold_trace" not in text
+
+
+def test_cli_baseline_csv_run_writes_expected_artifacts(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_evidence_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    for name in [
+        "investigation_case.json",
+        "dataset_profile.json",
+        "baseline_profile.json",
+        "investigation_plan.json",
+        "baseline_comparison.json",
+        "evidence_ledger.json",
+        "investigation_trace.json",
+    ]:
+        assert (output_dir / name).exists()
+    assert "Baseline profile written to" in result.stdout
+    assert "Baseline comparison written to" in result.stdout
+
+
+def test_cli_rejects_baseline_without_current_input(tmp_path: Path) -> None:
+    result = run_cli(
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--output-dir",
+        str(tmp_path / "out"),
+    )
+
+    assert result.returncode != 0
+    assert "--baseline requires --input" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_rejects_baseline_sheet_with_csv(tmp_path: Path) -> None:
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--baseline-sheet",
+        "Sheet1",
+        "--output-dir",
+        str(tmp_path / "out"),
+    )
+
+    assert result.returncode != 0
+    assert "--baseline-sheet can only be used with Excel baseline files" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_baseline_comparison_artifact_is_aggregate_only(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_evidence_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    comparison = json.loads((output_dir / "baseline_comparison.json").read_text(encoding="utf-8"))
+    assert comparison["artifact_type"] == "baseline_comparison"
+    for key in [
+        "row_count_comparison",
+        "schema_comparison",
+        "null_comparison",
+        "numeric_comparison",
+        "date_comparison",
+        "category_shape_comparison",
+        "duplicate_comparison",
+    ]:
+        assert key in comparison
+    assert comparison["safety_notes"]
+    assert _find_forbidden_keys(comparison) == []
+    serialized = json.dumps(comparison)
+    assert "avery@example.test" not in serialized
+    assert "CUST-001" not in serialized
+
+
+def test_null_increase_baseline_evidence_records_signal_without_final_language(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_null_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["issue"]["selected_route"] == "null_increase_investigation"
+    item = _evidence_item(ledger, "baseline_null_comparison")
+    assert item is not None
+    email_delta = next(
+        delta for delta in item["metrics"]["column_deltas"] if delta["column_name"] == "email"
+    )
+    assert email_delta["current_null_percentage"] > email_delta["baseline_null_percentage"]
+    serialized = json.dumps(item).casefold()
+    assert "confirmed" not in serialized
+    assert "proved" not in serialized
+
+
+def test_duplicate_baseline_evidence_does_not_write_duplicated_values(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_duplicate_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    item = _evidence_item(ledger, "baseline_duplicate_comparison")
+    assert item is not None
+    assert item["metrics"]["max_duplicate_count_delta"] >= 1
+    assert _find_forbidden_keys(item) == []
+    assert "CUST-010" not in json.dumps(item)
+
+
+def test_schema_baseline_evidence_uses_column_names_only(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_schema_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Header changed in the customer file",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    item = _evidence_item(ledger, "baseline_schema_comparison")
+    assert item is not None
+    assert "added_columns" in item["metrics"]
+    assert "removed_columns" in item["metrics"]
+    assert _find_forbidden_keys(item) == []
+    assert "avery@example.test" not in json.dumps(item)
+
+
+def test_missing_issue_with_input_and_baseline_writes_not_executed_ledger(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_missing_issue_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (output_dir / "baseline_profile.json").exists()
+    assert (output_dir / "baseline_comparison.json").exists()
+    ledger = json.loads((output_dir / "evidence_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["execution"]["status"] == "not_executed"
+    assert ledger["evidence_items"] == []
+    assert "No issue statement was supplied" in ledger["execution"]["reason"]
+
+
+def test_trace_contains_concise_baseline_metadata_only(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_trace_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    trace = json.loads((output_dir / "investigation_trace.json").read_text(encoding="utf-8"))
+    assert trace["artifacts"]["baseline_profile"] == (output_dir / "baseline_profile.json").as_posix()
+    assert trace["artifacts"]["baseline_comparison"] == (output_dir / "baseline_comparison.json").as_posix()
+    assert trace["baseline"]["available"] is True
+    assert trace["baseline"]["row_count"] == 12
+    assert "comparison_signal_count" in trace["baseline_comparison"]
+    assert "null_comparison" not in trace
+    assert "evidence_items" not in trace
+
+
+def test_case_contains_baseline_reference(tmp_path: Path) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_case_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Nulls increased in the customer email field",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    case = json.loads((output_dir / "investigation_case.json").read_text(encoding="utf-8"))
+    assert case["baseline_reference"]["input_provided"] is True
+    assert case["baseline_reference"]["baseline_profile_artifact"] == (
+        output_dir / "baseline_profile.json"
+    ).as_posix()
+    assert case["baseline_reference"]["baseline_comparison_artifact"] == (
+        output_dir / "baseline_comparison.json"
+    ).as_posix()
+
+
+def test_baseline_artifacts_and_ledger_avoid_forbidden_keys_and_raw_values(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("pandas")
+    output_dir = tmp_path / "baseline_safety_run"
+
+    result = run_cli(
+        "--input",
+        "examples/customer_quality_snapshot.csv",
+        "--baseline",
+        "examples/customer_quality_snapshot_baseline.csv",
+        "--issue",
+        "Customer IDs have started duplicating",
+        "--output-dir",
+        str(output_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    for name in ["baseline_profile.json", "baseline_comparison.json", "evidence_ledger.json"]:
+        payload = json.loads((output_dir / name).read_text(encoding="utf-8"))
+        assert _find_forbidden_keys(payload) == []
+        serialized = json.dumps(payload)
+        assert "avery@example.test" not in serialized
+        assert "CUST-001" not in serialized
+        assert "customer_id" in serialized or name == "baseline_profile.json"
+
+
+def _evidence_item(ledger: dict[str, Any], check_id: str) -> dict[str, Any] | None:
+    return next(
+        (item for item in ledger["evidence_items"] if item["check_id"] == check_id),
+        None,
+    )

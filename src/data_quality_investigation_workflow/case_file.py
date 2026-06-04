@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from data_quality_investigation_workflow.issue_classifier import classify_issue
 from data_quality_investigation_workflow.planning import PLAN_FILENAME
+from data_quality_investigation_workflow.baseline import BASELINE_COMPARISON_FILENAME, BASELINE_PROFILE_FILENAME
 from data_quality_investigation_workflow.trace import DATASET_PROFILE_FILENAME, TRACE_FILENAME
 from data_quality_investigation_workflow.workflow_scope import IMPLEMENTED_SCOPE, NOT_YET_IMPLEMENTED
 
@@ -44,6 +45,9 @@ def build_investigation_case(
     profile_path: Path | None = None,
     plan_path: Path | None = None,
     ledger_path: Path | None = None,
+    baseline_dataset: "LoadedDataset" | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
     case_id: str | None = None,
     created_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -56,6 +60,12 @@ def build_investigation_case(
     dataset_profile_path = profile_path
     if loaded_dataset is not None and dataset_profile_path is None:
         dataset_profile_path = output_path / DATASET_PROFILE_FILENAME
+    baseline_profile_path = baseline_profile_path or (
+        output_path / BASELINE_PROFILE_FILENAME if baseline_dataset is not None else None
+    )
+    baseline_comparison_path = baseline_comparison_path or (
+        output_path / BASELINE_COMPARISON_FILENAME if baseline_dataset is not None else None
+    )
 
     artifacts = {
         "investigation_case": case_path.as_posix(),
@@ -64,6 +74,10 @@ def build_investigation_case(
         "evidence_ledger": evidence_ledger_path.as_posix() if evidence_ledger_path else None,
         "investigation_trace": trace_path.as_posix(),
     }
+    if baseline_profile_path is not None:
+        artifacts["baseline_profile"] = baseline_profile_path.as_posix()
+    if baseline_comparison_path is not None:
+        artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
 
     input_provided = loaded_dataset is not None
     classification = classify_issue(issue_statement)
@@ -97,6 +111,11 @@ def build_investigation_case(
             loaded_dataset=loaded_dataset,
             profile_path=dataset_profile_path,
         ),
+        "baseline_reference": _baseline_reference(
+            baseline_dataset=baseline_dataset,
+            baseline_profile_path=baseline_profile_path,
+            baseline_comparison_path=baseline_comparison_path,
+        ),
         "artifacts": artifacts,
         "authority_boundary": CASE_AUTHORITY_BOUNDARY,
     }
@@ -110,6 +129,9 @@ def write_investigation_case(
     profile_path: Path | None = None,
     plan_path: Path | None = None,
     ledger_path: Path | None = None,
+    baseline_dataset: "LoadedDataset" | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
 ) -> Path:
     """Create the output directory and write the investigation case artifact."""
     output_path = Path(output_dir)
@@ -122,6 +144,9 @@ def write_investigation_case(
         profile_path=profile_path,
         plan_path=plan_path,
         ledger_path=ledger_path,
+        baseline_dataset=baseline_dataset,
+        baseline_profile_path=baseline_profile_path,
+        baseline_comparison_path=baseline_comparison_path,
     )
     case_path.write_text(json.dumps(case, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return case_path
@@ -167,4 +192,38 @@ def _dataset_reference(
         "row_count": loaded_dataset.row_count,
         "column_count": loaded_dataset.column_count,
         "profile_artifact": profile_path.as_posix() if profile_path else None,
+    }
+
+
+def _baseline_reference(
+    *,
+    baseline_dataset: "LoadedDataset" | None,
+    baseline_profile_path: Path | None,
+    baseline_comparison_path: Path | None,
+) -> dict[str, Any]:
+    if baseline_dataset is None:
+        return {
+            "input_provided": False,
+            "file_name": None,
+            "file_extension": None,
+            "sheet_name": None,
+            "row_count": None,
+            "column_count": None,
+            "baseline_profile_artifact": None,
+            "baseline_comparison_artifact": None,
+        }
+
+    return {
+        "input_provided": True,
+        "file_name": baseline_dataset.file_name,
+        "file_extension": baseline_dataset.file_extension,
+        "sheet_name": baseline_dataset.sheet_name,
+        "row_count": baseline_dataset.row_count,
+        "column_count": baseline_dataset.column_count,
+        "baseline_profile_artifact": (
+            baseline_profile_path.as_posix() if baseline_profile_path else None
+        ),
+        "baseline_comparison_artifact": (
+            baseline_comparison_path.as_posix() if baseline_comparison_path else None
+        ),
     }

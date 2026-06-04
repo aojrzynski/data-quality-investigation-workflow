@@ -23,7 +23,7 @@ LEDGER_LIMITATIONS = [
     "This ledger records deterministic evidence only.",
     "The ledger does not create final findings.",
     "The ledger does not confirm root cause.",
-    "Baseline comparison is not implemented in PR #5.",
+    "Baseline comparison evidence records aggregate signals only and remains subject to human review.",
 ]
 
 LEDGER_AUTHORITY_BOUNDARY = [
@@ -51,6 +51,9 @@ def build_evidence_ledger(
     ledger_path: Path,
     trace_path: Path,
     reason: str | None = None,
+    baseline_comparison: dict[str, Any] | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an aggregate-only evidence ledger payload."""
     issue_provided = bool(classification.get("provided"))
@@ -61,8 +64,12 @@ def build_evidence_ledger(
         "checks_executed_count": checks_executed_count,
         "evidence_item_count": len(evidence_items),
         "checks_not_run_count": len(checks_not_run),
-        "baseline_available": False,
-        "baseline_note": "Baseline comparison is not implemented in PR #5.",
+        "baseline_available": baseline_comparison is not None,
+        "baseline_note": (
+            "Aggregate baseline comparison signals were available for route-aware evidence."
+            if baseline_comparison is not None
+            else "No baseline comparison was available for this run."
+        ),
     }
     if reason:
         execution["reason"] = reason
@@ -90,13 +97,15 @@ def build_evidence_ledger(
         "checks_not_run": checks_not_run,
         "safety_notes": SAFETY_NOTES,
         "limitations": LEDGER_LIMITATIONS,
-        "artifacts": {
-            "investigation_case": case_path.as_posix(),
-            "dataset_profile": profile_path.as_posix(),
-            "investigation_plan": plan_path.as_posix(),
-            "evidence_ledger": ledger_path.as_posix(),
-            "investigation_trace": trace_path.as_posix(),
-        },
+        "artifacts": _artifacts(
+            case_path=case_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            ledger_path=ledger_path,
+            trace_path=trace_path,
+            baseline_profile_path=baseline_profile_path,
+            baseline_comparison_path=baseline_comparison_path,
+        ),
         "authority_boundary": LEDGER_AUTHORITY_BOUNDARY,
     }
 
@@ -114,13 +123,21 @@ def write_evidence_ledger(
     profile_path: Path,
     plan_path: Path,
     trace_path: Path,
+    baseline_comparison: dict[str, Any] | None = None,
+    baseline_profile_path: Path | None = None,
+    baseline_comparison_path: Path | None = None,
 ) -> Path:
     """Run route checks and write the aggregate-only evidence ledger artifact."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     ledger_path = output_path / LEDGER_FILENAME
 
-    result = run_route_checks(loaded_dataset, dataset_profile, investigation_plan)
+    result = run_route_checks(
+        loaded_dataset,
+        dataset_profile,
+        investigation_plan,
+        baseline_comparison=baseline_comparison,
+    )
     ledger = build_evidence_ledger(
         issue_statement=issue_statement,
         classification=classification,
@@ -137,6 +154,33 @@ def write_evidence_ledger(
         ledger_path=ledger_path,
         trace_path=trace_path,
         reason=result.get("reason"),
+        baseline_comparison=baseline_comparison,
+        baseline_profile_path=baseline_profile_path,
+        baseline_comparison_path=baseline_comparison_path,
     )
     ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     return ledger_path
+
+
+def _artifacts(
+    *,
+    case_path: Path,
+    profile_path: Path,
+    plan_path: Path,
+    ledger_path: Path,
+    trace_path: Path,
+    baseline_profile_path: Path | None,
+    baseline_comparison_path: Path | None,
+) -> dict[str, str]:
+    artifacts = {
+        "investigation_case": case_path.as_posix(),
+        "dataset_profile": profile_path.as_posix(),
+        "investigation_plan": plan_path.as_posix(),
+        "evidence_ledger": ledger_path.as_posix(),
+        "investigation_trace": trace_path.as_posix(),
+    }
+    if baseline_profile_path is not None:
+        artifacts["baseline_profile"] = baseline_profile_path.as_posix()
+    if baseline_comparison_path is not None:
+        artifacts["baseline_comparison"] = baseline_comparison_path.as_posix()
+    return artifacts

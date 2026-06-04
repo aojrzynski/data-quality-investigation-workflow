@@ -16,14 +16,14 @@ This roadmap describes the intended pull request sequence for building the Data 
 - **PR #4: investigation planning and route selection — implemented**
   Added deterministic issue classification for planning purposes only, selected planned routes, and wrote `investigation_plan.json` without running checks.
 
-- **PR #5: deterministic checks and evidence ledger — current / implemented**
+- **PR #5: deterministic checks and evidence ledger — implemented**
   Added deterministic current-dataset checks for selected issue routes and recorded aggregate-only results in `evidence_ledger.json`.
 
-- **PR #6: baseline comparison support**
-  Add support for comparing the current dataset against a supplied baseline or previous run artifact.
+- **PR #6: baseline comparison support — current / implemented**
+  Added support for comparing the current dataset against a supplied baseline dataset with aggregate-only baseline comparison evidence.
 
 - **PR #7: hypothesis tracker and findings builder**
-  Add hypothesis tracking and a findings artifact that separates confirmed, not confirmed, and still unclear items.
+  Add hypothesis tracking and a findings builder that separates confirmed, not confirmed, and still unclear items.
 
 - **PR #8: Markdown report and deeper docs**
   Add a human-readable investigation report and expand usage documentation.
