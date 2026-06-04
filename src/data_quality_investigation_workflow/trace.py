@@ -43,12 +43,20 @@ def build_investigation_trace(
     hypothesis_metadata: dict[str, Any] | None = None,
     findings_metadata: dict[str, Any] | None = None,
     report_metadata: dict[str, Any] | None = None,
+    llm_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an investigation trace payload with concise route and evidence metadata."""
     classification = classify_issue(issue_statement)
     input_provided = loaded_dataset is not None
     issue_missing = classification["issue_type"] == "missing_issue_statement"
-    if report_metadata is not None and report_path is not None and not issue_missing:
+    if llm_metadata is not None and not issue_missing:
+        if llm_metadata.get("status") == "completed":
+            status = "llm_notes_written"
+            stage = "optional_llm_notes_created"
+        else:
+            status = "report_written"
+            stage = "llm_notes_failed_validation"
+    elif report_metadata is not None and report_path is not None and not issue_missing:
         status = "report_written"
         stage = "markdown_report_created"
     elif (
@@ -99,6 +107,7 @@ def build_investigation_trace(
             hypothesis_tracker_path=hypothesis_tracker_path,
             findings_path=findings_path,
             report_path=report_path,
+            llm_metadata=llm_metadata,
         ),
         "authority_boundary": AUTHORITY_BOUNDARY,
     }
@@ -194,6 +203,19 @@ def build_investigation_trace(
                 report_metadata.get("supported_signal_count", 0)
             ),
         }
+    if llm_metadata is not None:
+        payload["llm"] = {
+            "requested": True,
+            "status": llm_metadata.get("status"),
+            "model": llm_metadata.get("model"),
+            "safe_input_summary_artifact": llm_metadata.get(
+                "safe_input_summary_artifact"
+            ),
+            "llm_notes_artifact": llm_metadata.get("llm_notes_artifact"),
+            "llm_notes_markdown_artifact": llm_metadata.get(
+                "llm_notes_markdown_artifact"
+            ),
+        }
     return payload
 
 
@@ -237,6 +259,7 @@ def write_investigation_trace(
     hypothesis_metadata: dict[str, Any] | None = None,
     findings_metadata: dict[str, Any] | None = None,
     report_metadata: dict[str, Any] | None = None,
+    llm_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Create the output directory and write the investigation trace JSON artifact."""
     output_path = Path(output_dir)
@@ -262,6 +285,7 @@ def write_investigation_trace(
         hypothesis_metadata=hypothesis_metadata,
         findings_metadata=findings_metadata,
         report_metadata=report_metadata,
+        llm_metadata=llm_metadata,
     )
     _write_json(trace_path, trace)
     return trace_path
@@ -305,6 +329,7 @@ def _artifacts(
     hypothesis_tracker_path: Path | None = None,
     findings_path: Path | None = None,
     report_path: Path | None = None,
+    llm_metadata: dict[str, Any] | None = None,
 ) -> dict[str, str | None]:
     artifacts = {
         "investigation_case": case_path.as_posix(),
@@ -323,4 +348,15 @@ def _artifacts(
         artifacts["investigation_findings"] = findings_path.as_posix()
     if report_path is not None:
         artifacts["investigation_report"] = report_path.as_posix()
+    if llm_metadata is not None:
+        if llm_metadata.get("safe_input_summary_artifact") is not None:
+            artifacts["llm_safe_input_summary"] = llm_metadata.get(
+                "safe_input_summary_artifact"
+            )
+        if llm_metadata.get("llm_notes_artifact") is not None:
+            artifacts["llm_investigation_notes"] = llm_metadata.get("llm_notes_artifact")
+        if llm_metadata.get("llm_notes_markdown_artifact") is not None:
+            artifacts["llm_investigation_notes_markdown"] = llm_metadata.get(
+                "llm_notes_markdown_artifact"
+            )
     return artifacts

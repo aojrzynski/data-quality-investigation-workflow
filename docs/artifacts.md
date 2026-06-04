@@ -71,3 +71,11 @@ This page documents the artifacts produced by Data Quality Investigation Workflo
 - Written: every successful run.
 - Contains: status/stage, route metadata, artifact paths, dataset counts, baseline availability, evidence counts, hypothesis counts, finding counts, and concise report metadata when applicable.
 - Excludes: full report content, full evidence items, full hypotheses, full findings, raw rows, and value lists.
+
+## Optional LLM notes artifacts
+
+`llm_safe_input_summary.json` records the deterministic aggregate-only summary allowed to be sent to the LLM. It references source artifacts and includes issue, run-context, evidence, hypothesis, finding, safety, and instruction-boundary summaries without raw rows or raw values.
+
+`llm_investigation_notes.json` records validated optional LLM notes, validation status, model, source artifacts, and authority boundaries. Failed validation artifacts contain safe error summaries and never store the raw invalid response.
+
+`llm_investigation_notes.md` is a secondary human-readable rendering of successful optional notes. It does not replace `investigation_report.md`.

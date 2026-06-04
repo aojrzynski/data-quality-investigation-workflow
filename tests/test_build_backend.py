@@ -17,3 +17,5 @@ def test_build_backend_metadata_includes_runtime_dependencies(tmp_path: Path) ->
 
     assert "Requires-Dist: pandas>=2.2" in metadata
     assert "Requires-Dist: openpyxl>=3.1" in metadata
+    assert "Provides-Extra: llm" in metadata
+    assert "Requires-Dist: openai>=1.0; extra == 'llm'" in metadata

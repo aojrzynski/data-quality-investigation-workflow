@@ -14,7 +14,7 @@ _REPORT_LIMITATIONS = [
     "The report does not determine root cause.",
     "The report does not approve, fix, certify, or trust the dataset.",
     "The report does not make legal, compliance, privacy, or governance verdicts.",
-    "No LLM is involved in the current implementation.",
+    "This deterministic report is not LLM-generated and remains separate from optional LLM notes.",
     "Human review remains the final authority.",
 ]
 

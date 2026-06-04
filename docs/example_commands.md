@@ -86,3 +86,13 @@ Expected artifacts:
 - `investigation_trace.json`
 
 The evidence ledger records `not_executed`. No hypothesis tracker, findings artifact, or Markdown report is written.
+
+## Optional LLM notes
+
+```bash
+python -m pip install -e ".[dev,llm]"
+export OPENAI_API_KEY="..."
+dq-investigate --input examples/customer_quality_snapshot.csv --issue "Customer IDs have started duplicating" --llm-notes --output-dir outputs/customer_llm_notes_run
+```
+
+Windows PowerShell: `$env:OPENAI_API_KEY="..."`

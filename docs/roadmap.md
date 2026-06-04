@@ -25,11 +25,17 @@ This roadmap describes the intended pull request sequence for building the Data 
 - **PR #7: hypothesis tracker and findings builder — implemented**
   Added `hypothesis_tracker.json` and `investigation_findings.json` for input + issue runs, mapping deterministic evidence IDs into cautious route-specific hypotheses and review-oriented finding summaries.
 
-- **PR #8: Markdown report and deeper docs — current / implemented**
+- **PR #8: Markdown report and deeper docs — implemented**
   Added `investigation_report.md` for input + issue runs and expanded README/docs for architecture, artifacts, commands, safety boundaries, and demo usage.
 
-- **PR #9: optional bounded LLM investigation notes — future**
-  Optional bounded LLM-generated notes over safe evidence only. LLM output must not be treated as authoritative.
+- **PR #9: optional bounded LLM investigation notes — current / implemented**
+  Added optional bounded LLM-generated notes over safe aggregate artifacts only. LLM output is validated and not authoritative.
 
 - **PR #10: source comment/docstring pass — future**
   Review code comments and docstrings for clarity after the main workflow pieces are in place.
+
+## PR #9 status
+
+Implemented: optional bounded LLM investigation notes via `--llm-notes`, safe input summary, validated JSON and Markdown notes artifacts, optional `llm` dependency extra, and docs/tests for the non-authoritative LLM path.
+
+Future PR #10: source comment and docstring cleanup remains future work.

@@ -17,11 +17,12 @@ IMPLEMENTED_SCOPE = [
     "safe aggregate baseline comparison",
     "hypothesis tracking from aggregate evidence IDs",
     "cautious investigation finding summaries",
+    "Markdown investigation report",
+    "optional bounded LLM notes",
 ]
 
 NOT_YET_IMPLEMENTED = [
-    "Markdown investigation report",
-    "optional LLM notes",
+    "source comment/docstring cleanup",
 ]
 
 AUTHORITY_BOUNDARY = [
