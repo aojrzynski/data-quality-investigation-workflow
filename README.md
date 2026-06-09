@@ -8,6 +8,15 @@ A reviewer gives it an issue statement, such as “customer IDs have started dup
 
 It does not fix the data. It does not prove root cause. It does not approve or certify a dataset. It helps structure the investigation so the reviewer has clearer evidence and better next questions. Human review remains the final authority.
 
+> [!NOTE]
+> **Part of the Data Agent Suite.**
+> 
+> This repo is one of 10 local-first data/AI agents built around practical data workflows, deterministic evidence, bounded LLM use, and review-ready artifacts.
+> 
+> The full ordered list of agents is included near the bottom of this README.
+> 
+> See the full suite overview: [Data Agent Suite](https://aojrzynski.github.io/agents/)
+
 ## The problem
 
 Data quality issues often begin as reports or suspicions. Someone notices that a report total dropped, customer IDs duplicated, dates are missing, or an important field has more blanks than expected.
@@ -233,3 +242,22 @@ Tests do not call a real LLM and do not require `OPENAI_API_KEY`.
 - [Demo workflow](docs/demo_workflow.md)
 - [Optional LLM notes](docs/llm_notes.md)
 - [Roadmap](docs/roadmap.md)
+
+---
+
+> [!NOTE]
+> **Data Agent Suite**  
+> This repo is part of the **Data Agent Suite**: 10 local-first data/AI agents focused on practical data workflows, deterministic evidence, bounded LLM use, and review-ready artifacts.
+> 
+> See the full suite overview: [Data Agent Suite](https://aojrzynski.github.io/agents/)
+>
+> 1. [Data Quality Triage Agent](https://github.com/aojrzynski/data-quality-triage-agent)
+> 2. [Data Reconciliation Agent](https://github.com/aojrzynski/data-reconciliation-agent)
+> 3. [Data Dictionary Agent](https://github.com/aojrzynski/data-dictionary-agent)
+> 4. [Data Contract Review Agent](https://github.com/aojrzynski/data-contract-review-agent)
+> 5. [Sensitive Field Review Agent](https://github.com/aojrzynski/sensitive-field-review-agent)
+> 6. [Data Test Suggestion Agent](https://github.com/aojrzynski/data-test-suggestion-agent)
+> 7. [Dataset Onboarding Reviewer Workflow](https://github.com/aojrzynski/dataset-onboarding-reviewer-workflow)
+> 8. **Data Quality Investigation Workflow**
+> 9. [Project Evidence Review Agent](https://github.com/aojrzynski/project-evidence-review-agent)
+> 10. [Data Migration Readiness Review Agent](https://github.com/aojrzynski/data-migration-readiness-review-agent)
